@@ -4,12 +4,12 @@
 
   const KEY = "work-tracker:v1";
   const TOKEN_KEY = "work-tracker:token";
-  const TIMER_KEY = "work-tracker:timer";
   const UI_KEY = "work-tracker:ui";
   const GIST_FILE = "work-tracker.json";
   const COLORS = ["#171512", "#b3261e", "#c2601a", "#8b6a1f", "#3d6b4f", "#2f5d7c", "#5b4a8a", "#8a4a6b", "#6b6459"];
-  const STATUS_LABEL = { todo: "할 일", doing: "진행 중", done: "완료" };
-  const PRI_LABEL = { 1: "높음", 2: "보통", 3: "낮음" };
+  const KINDS = ["공모전", "프로젝트", "수업·과제", "인턴·연구", "자격증·어학", "대외활동", "개인", "기타"];
+  const STAGES = { active: "진행 중", idea: "시작 전", hold: "보류", done: "끝남" };
+  const STAGE_ORDER = { active: 0, idea: 1, hold: 2, done: 3 };
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
   // ---------- utils ----------
@@ -22,10 +22,7 @@
   const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
   const diffDays = (a, b) => Math.round((parseYmd(a) - parseYmd(b)) / 86400000);
   const md = (s) => { if (!s) return ""; const d = parseYmd(s); return `${d.getMonth() + 1}.${d.getDate()}`; };
-  const fmtMin = (m) => { m = Math.round(m || 0); if (m < 60) return `${m}분`; const h = Math.floor(m / 60), r = m % 60; return r ? `${h}시간 ${r}분` : `${h}시간`; };
-  const fmtH = (m) => (m / 60).toFixed(m >= 600 ? 0 : 1) + "h";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const weekStart = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const w = (x.getDay() + 6) % 7; return addDays(x, -w); };
   const storage = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
@@ -38,44 +35,69 @@
 
   // ---------- state ----------
   function seed() {
-    const p = (name, start, due, color) => ({ id: uid(), name, start, due, color, link: "", archived: false, createdAt: Date.now() });
+    const p = (name, kind, start, due, color, memo = "") => ({ id: uid(), name, kind, stage: "active", memo, start, due, color, link: "", archived: false, createdAt: Date.now() });
     const projects = [
-      p("토익 900+ (100만원)", "2026-11-02", "2026-11-30", "#2f5d7c"),
-      p("신호및시스템 발표", "2026-11-03", "2026-12-08", "#b3261e"),
-      p("연구실 인턴 - 로켓", "2026-11-06", "2026-11-13", "#3d6b4f"),
-      p("AI-X 아이디어 공모전", "2026-11-06", "2026-11-23", "#5b4a8a"),
-      p("생활 · 기타", "", "", "#6b6459"),
+      p("토익 900+ (100만원)", "자격증·어학", "2026-11-02", "2026-11-30", "#2f5d7c", "900점 넘기면 장학금 100만원"),
+      p("신호및시스템 발표", "수업·과제", "2026-11-03", "2026-12-08", "#b3261e", "자료 제출 11/30, 발표 12/8"),
+      p("연구실 인턴 - 로켓", "인턴·연구", "2026-11-06", "2026-11-13", "#3d6b4f"),
+      p("AI-X 아이디어 공모전", "공모전", "2026-11-06", "2026-11-23", "#5b4a8a", "신청서 제출"),
+      p("생활 · 기타", "개인", "", "", "#6b6459"),
     ];
     const [toeic, sig, lab, aix, life] = projects;
     const t = (projectId, title, extra = {}) => ({
-      id: uid(), projectId, title, status: "todo", priority: 2, due: "", est: 0, spent: 0,
+      id: uid(), projectId, title, status: "todo", priority: 2, due: "",
       subtasks: [], note: "", pinned: "", createdAt: Date.now(), doneAt: null, ...extra,
     });
     const tasks = [
-      t(toeic.id, "LC 파트 2 오답 정리", { priority: 2, est: 50 }),
-      t(toeic.id, "RC 실전 모의고사 1회", { priority: 1, est: 75 }),
+      t(toeic.id, "LC 파트 2 오답 정리"),
+      t(toeic.id, "RC 실전 모의고사 1회", { priority: 1 }),
       t(sig.id, "발표 자료 제출", { priority: 1, due: "2026-11-30", subtasks: [
         { id: uid(), text: "목차 구성", done: false }, { id: uid(), text: "슬라이드 초안", done: false }, { id: uid(), text: "팀원 리뷰", done: false } ] }),
       t(sig.id, "발표 리허설", { due: "2026-12-08" }),
-      t(lab.id, "로켓 프로젝트 자료 읽기", { status: "doing", priority: 1, due: "2026-11-13", est: 90 }),
-      t(aix.id, "아이디어 3개 브레인스토밍", { priority: 2, due: "2026-11-15" }),
+      t(lab.id, "로켓 프로젝트 자료 읽기", { status: "doing", priority: 1, due: "2026-11-13" }),
+      t(aix.id, "아이디어 3개 브레인스토밍", { due: "2026-11-15" }),
       t(aix.id, "공모전 신청서 작성", { priority: 1, due: "2026-11-23" }),
       t(life.id, "옷 사기", { priority: 3, due: "2026-11-30" }),
       t(life.id, "올리브영 5000원 이상", { priority: 3, due: "2026-11-30" }),
     ];
-    return { version: 1, updatedAt: Date.now(), name: "RIN", projects, tasks, sessions: [], notes: {}, gistId: "", autoSync: false };
+    return { version: 2, updatedAt: Date.now(), name: "RIN", projects, tasks, notes: {}, gistId: "", autoSync: false };
+  }
+
+  // 예전 데이터에 종류/상태가 없으면 이름으로 추정해서 채움
+  function guessKind(name) {
+    const n = name || "";
+    if (/공모전|해커톤|대회|챌린지/.test(n)) return "공모전";
+    if (/인턴|연구|랩|lab/i.test(n)) return "인턴·연구";
+    if (/토익|토플|오픽|자격증|기사|어학|toeic|opic/i.test(n)) return "자격증·어학";
+    if (/발표|과제|수업|시험|강의|레포트|시스템/.test(n)) return "수업·과제";
+    if (/동아리|서포터즈|봉사|대외/.test(n)) return "대외활동";
+    if (/생활|개인|기타/.test(n)) return "개인";
+    return "프로젝트";
+  }
+  function migrate(s) {
+    s.notes ||= {}; s.projects ||= []; s.tasks ||= [];
+    s.projects.forEach((p) => {
+      if (!p.kind) p.kind = guessKind(p.name);
+      if (!p.stage) p.stage = "active";
+      if (p.memo == null) p.memo = "";
+    });
+    delete s.sessions;
+    s.tasks.forEach((t) => { delete t.est; delete t.spent; });
+    s.version = 2;
+    return s;
   }
 
   let state;
   try { state = JSON.parse(storage.get(KEY)) || seed(); } catch { state = seed(); }
-  state.notes ||= {}; state.sessions ||= []; state.projects ||= []; state.tasks ||= [];
+  state = migrate(state);
+  storage.del("work-tracker:timer"); // 예전 집중 타이머 상태 정리
 
-  let ui = { view: "today", boardFilter: "all", showArchived: false, weekOffset: 0 };
+  let ui = { view: "today", boardFilter: "all", showArchived: false, kind: "all", expanded: null };
   try { Object.assign(ui, JSON.parse(storage.get(UI_KEY)) || {}); } catch { /* ignore */ }
-  ui.weekOffset = 0;
+  if (!["today", "board", "projects"].includes(ui.view)) ui.view = "today";
   const MINI_MODE = new URLSearchParams(location.search).has("mini");
   const baseTitle = () => (MINI_MODE ? "Work Tracker Mini" : `${state.name || "나"}의 작업실 · Work Tracker`);
-  const saveUi = () => storage.set(UI_KEY, JSON.stringify({ view: ui.view, boardFilter: ui.boardFilter, showArchived: ui.showArchived }));
+  const saveUi = () => storage.set(UI_KEY, JSON.stringify({ view: ui.view, boardFilter: ui.boardFilter, showArchived: ui.showArchived, kind: ui.kind, expanded: ui.expanded }));
 
   function save({ silent = false, sync = true } = {}) {
     state.updatedAt = Date.now();
@@ -87,6 +109,13 @@
   const proj = (id) => state.projects.find((p) => p.id === id);
   const task = (id) => state.tasks.find((t) => t.id === id);
   const activeProjects = () => state.projects.filter((p) => !p.archived);
+  // 사이드바/미니에 보여줄 '벌려놓은 일' = 보관 안 됨 + 끝나지 않음
+  const openCommitments = () => state.projects.filter((p) => !p.archived && p.stage !== "done").sort(sortCommit);
+  function sortCommit(a, b) {
+    return (STAGE_ORDER[a.stage] ?? 9) - (STAGE_ORDER[b.stage] ?? 9) ||
+      (a.due || "9999").localeCompare(b.due || "9999") ||
+      a.createdAt - b.createdAt;
+  }
 
   // ---------- task helpers ----------
   function isToday(t) {
@@ -100,17 +129,12 @@
   const sortTasks = (a, b) =>
     (a.status === "doing" ? 0 : 1) - (b.status === "doing" ? 0 : 1) ||
     a.priority - b.priority ||
-    (a.due || "9999") .localeCompare(b.due || "9999") ||
+    (a.due || "9999").localeCompare(b.due || "9999") ||
     a.createdAt - b.createdAt;
 
   function setStatus(t, status) {
     t.status = status;
     t.doneAt = status === "done" ? Date.now() : null;
-    // 타이머가 돌던 작업을 완료하면 시간 기록 후 타이머 종료
-    if (status === "done" && timer.taskId === t.id) {
-      const min = logSession(); resetTimer();
-      if (min) setTimeout(() => toast(`${fmtMin(min)} 기록하고 완료했어요`), 300);
-    }
   }
 
   function dueBadge(due, status) {
@@ -124,13 +148,26 @@
     return `<span class="${cls}">${txt}</span>`;
   }
 
+  function ddayHtml(p) {
+    if (!p.due) return `<span class="dday none">기한 없음</span>`;
+    const d = diffDays(p.due, ymd());
+    if (p.stage === "done") return `<span class="dday none">~${md(p.due)}</span>`;
+    const cls = d < 0 ? "over" : d <= 3 ? "urgent" : "";
+    return `<span class="dday ${cls}">${d < 0 ? `D+${-d}` : d === 0 ? "D-DAY" : `D-${d}`}</span>`;
+  }
+
+  function projectStats(p) {
+    const ts = state.tasks.filter((t) => t.projectId === p.id);
+    const done = ts.filter((t) => t.status === "done").length;
+    const open = ts.filter((t) => t.status !== "done").sort(sortTasks);
+    return { ts, open, done, total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0, next: open[0] };
+  }
+
   function taskRow(t) {
     const p = proj(t.projectId);
     const subsDone = t.subtasks.filter((s) => s.done).length;
     const subs = t.subtasks.length ? `<span>☰ ${subsDone}/${t.subtasks.length}</span>` : "";
-    const time = t.spent || t.est ? `<span>⏱ ${fmtMin(t.spent)}${t.est ? " / " + fmtMin(t.est) : ""}</span>` : "";
     const pri = t.priority < 3 && t.status !== "done" ? `<span class="pri p${t.priority}">${t.priority === 1 ? "!!" : "!"}</span>` : "";
-    const bar = t.est && t.status !== "done" ? `<div class="mini-bar"><i style="width:${Math.min(100, (t.spent / t.est) * 100)}%"></i></div>` : "";
     return `<li class="task ${t.status}" data-id="${t.id}">
       <button class="cb" data-act="toggle" aria-label="완료 전환"></button>
       <div>
@@ -138,11 +175,10 @@
         <div class="meta">
           ${p ? `<span class="proj"><i class="dot" style="background:${p.color}"></i>${esc(p.name)}</span>` : ""}
           ${t.status === "doing" ? "<span>진행 중</span>" : ""}
-          ${dueBadge(t.due, t.status)} ${subs} ${time}
-        </div>${bar}
+          ${dueBadge(t.due, t.status)} ${subs}
+        </div>
       </div>
       <div class="side-actions">
-        ${t.status !== "done" ? `<button class="icon-btn" data-act="focus" title="집중 시작">▶</button>` : ""}
         ${t.status !== "done" ? `<button class="icon-btn" data-act="pin" title="오늘로 고정/해제">${t.pinned === ymd() ? "★" : "☆"}</button>` : ""}
       </div>
     </li>`;
@@ -155,19 +191,36 @@
     $$("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === ui.view));
     $$(".view").forEach((v) => (v.hidden = v.id !== `view-${ui.view}`));
     fillProjectSelects();
-    ({ today: renderToday, board: renderBoard, projects: renderProjects, stats: renderStats })[ui.view]();
+    ({ today: renderToday, board: renderBoard, projects: renderCommitments })[ui.view]();
+    renderSpread();
     renderMini();
-    renderTimer();
   }
 
   function fillProjectSelects() {
-    const opts = activeProjects().map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    const opts = activeProjects().filter((p) => p.stage !== "done").sort(sortCommit).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     const qa = $("#qaProject"), cur = qa.value;
-    qa.innerHTML = `<option value="">프로젝트 없음</option>` + opts;
+    qa.innerHTML = `<option value="">벌린 일 없음</option>` + opts;
     if ([...qa.options].some((o) => o.value === cur)) qa.value = cur;
     const bf = $("#boardFilter");
-    bf.innerHTML = `<option value="all">전체 프로젝트</option>` + opts;
+    bf.innerHTML = `<option value="all">전체</option>` + activeProjects().sort(sortCommit).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     bf.value = [...bf.options].some((o) => o.value === ui.boardFilter) ? ui.boardFilter : "all";
+  }
+
+  // 사이드바: 벌려놓은 일 한눈에
+  function spreadItems(list) {
+    return list.map((p) => {
+      const st = projectStats(p);
+      return `<li class="sp stage-${p.stage}" data-pid="${p.id}" style="--c:${p.color}" title="${esc(p.memo || p.name)}">
+        <span class="sp-name">${esc(p.name)}</span>
+        ${ddayHtml(p)}
+        <span class="sp-sub">${esc(p.kind)}${p.stage !== "active" ? ` · ${STAGES[p.stage]}` : ""}${st.total ? ` · ${st.done}/${st.total}` : ""}</span>
+      </li>`;
+    }).join("");
+  }
+  function renderSpread() {
+    const list = openCommitments();
+    $("#spreadCount").textContent = list.length;
+    $("#spreadList").innerHTML = spreadItems(list) || `<li class="empty">아직 없어요. ＋로 추가하세요.</li>`;
   }
 
   function renderToday() {
@@ -188,10 +241,11 @@
     $("#todoCount").textContent = list.length;
     $("#doneCount").textContent = done.length;
 
-    const focusMin = state.sessions.filter((s) => s.date === today).reduce((a, s) => a + s.min, 0);
+    const soon = openCommitments().filter((p) => p.due && diffDays(p.due, today) <= 7).length;
     $("#todayStats").innerHTML = `
-      <div><b>${done.length}/${done.length + list.length}</b><span>완료</span></div>
-      <div><b>${fmtH(focusMin)}</b><span>오늘 집중</span></div>`;
+      <div><b>${done.length}/${done.length + list.length}</b><span>오늘 완료</span></div>
+      <div><b>${openCommitments().length}</b><span>벌려놓은 일</span></div>
+      <div><b>${soon}</b><span>7일 내 마감</span></div>`;
 
     const note = $("#dailyNote");
     if (document.activeElement !== note) note.value = state.notes[today] || "";
@@ -210,37 +264,65 @@
         const subsDone = t.subtasks.filter((s) => s.done).length;
         return `<li class="card" draggable="true" data-id="${t.id}" style="--c:${p ? p.color : "var(--line)"}">
           <div class="t-title">${t.priority < 3 && st !== "done" ? `<span class="pri p${t.priority}">${t.priority === 1 ? "!!" : "!"}</span> ` : ""}${esc(t.title)}</div>
-          <div class="meta">${p ? `<span>${esc(p.name)}</span>` : ""}${dueBadge(t.due, t.status)}${t.subtasks.length ? `<span>☰ ${subsDone}/${t.subtasks.length}</span>` : ""}${t.spent ? `<span>⏱ ${fmtMin(t.spent)}</span>` : ""}</div>
+          <div class="meta">${p ? `<span>${esc(p.name)}</span>` : ""}${dueBadge(t.due, t.status)}${t.subtasks.length ? `<span>☰ ${subsDone}/${t.subtasks.length}</span>` : ""}</div>
         </li>`;
       }).join("");
     });
   }
 
-  function projectStats(p) {
-    const ts = state.tasks.filter((t) => t.projectId === p.id);
-    const done = ts.filter((t) => t.status === "done").length;
-    const min = state.sessions.filter((s) => s.projectId === p.id).reduce((a, s) => a + s.min, 0);
-    return { ts, done, total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0, min };
-  }
-
-  function ddayHtml(p) {
-    if (!p.due) return "";
-    const d = diffDays(p.due, ymd());
-    const cls = d < 0 ? "over" : d <= 3 ? "urgent" : "";
-    return `<span class="dday ${cls}">${d < 0 ? `D+${-d}` : d === 0 ? "D-DAY" : `D-${d}`}</span>`;
-  }
-
-  function renderProjects() {
+  // 벌려놓은 일 전체 목록
+  function renderCommitments() {
     $("#showArchived").checked = ui.showArchived;
-    const list = state.projects.filter((p) => ui.showArchived || !p.archived);
+    const pool = state.projects.filter((p) => ui.showArchived || (!p.archived && p.stage !== "done"));
+    const kindsPresent = KINDS.filter((k) => pool.some((p) => p.kind === k));
+    if (ui.kind !== "all" && !kindsPresent.includes(ui.kind)) ui.kind = "all";
+    $("#kindChips").innerHTML = [["all", `전체 ${pool.length}`], ...kindsPresent.map((k) => [k, `${k} ${pool.filter((p) => p.kind === k).length}`])]
+      .map(([k, label]) => `<button class="chip ${ui.kind === k ? "on" : ""}" data-kind="${esc(k)}">${esc(label)}</button>`).join("");
 
-    // timeline: this month ±
+    const open = openCommitments();
+    const cnt = (s) => open.filter((p) => p.stage === s).length;
+    $("#cStats").innerHTML = `
+      <div><b>${cnt("active")}</b><span>진행 중</span></div>
+      <div><b>${cnt("idea")}</b><span>시작 전</span></div>
+      <div><b>${cnt("hold")}</b><span>보류</span></div>`;
+
+    const list = pool.filter((p) => ui.kind === "all" || p.kind === ui.kind)
+      .sort((a, b) => (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || sortCommit(a, b));
+
+    $("#cList").innerHTML = list.length ? `
+      <div class="c-row c-headrow"><span></span><span>이름</span><span>종류</span><span>상태</span><span>마감</span><span>진행</span><span>다음 할 일</span><span></span></div>
+      ${list.map((p) => {
+        const st = projectStats(p);
+        const open = ui.expanded === p.id;
+        const recentDone = st.ts.filter((t) => t.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 3);
+        return `<article class="c-item stage-${p.stage} ${p.archived ? "archived" : ""} ${open ? "open" : ""}" data-pid="${p.id}" style="--c:${p.color}">
+          <div class="c-row" data-act="expand">
+            <span class="c-caret">${open ? "▾" : "▸"}</span>
+            <div class="c-name"><b>${esc(p.name)}</b>${p.memo ? `<span class="c-memo">${esc(p.memo)}</span>` : ""}${p.archived ? `<span class="c-memo">보관됨</span>` : ""}</div>
+            <span class="kind">${esc(p.kind)}</span>
+            <select class="stage-sel" data-act="stage" aria-label="상태">${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${p.stage === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+            <div class="c-due">${ddayHtml(p)}<span class="muted small">${p.start || p.due ? `${md(p.start) || "?"}–${md(p.due) || "?"}` : ""}</span></div>
+            <div class="c-prog"><div class="progress"><i style="width:${st.pct}%"></i></div><span>${st.total ? `${st.done}/${st.total}` : "할 일 없음"}</span></div>
+            <div class="c-next">${st.next ? `<span class="nx" data-id="${st.next.id}">→ ${esc(st.next.title)}</span>` : `<span class="muted">—</span>`}</div>
+            <div class="c-act">${p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener" title="링크 열기">↗</a>` : ""}<button class="icon-btn" data-act="edit-project" title="편집">✎</button></div>
+          </div>
+          ${open ? `<div class="c-body">
+            <ul class="ptasks">${[...st.open, ...recentDone].map((t) => `<li class="${t.status}" data-id="${t.id}"><span>${esc(t.title)}</span>${t.due && t.status !== "done" ? dueBadge(t.due, t.status) : ""}</li>`).join("") || `<li class="muted none">아직 할 일이 없어요</li>`}</ul>
+            <form class="padd" data-act="padd"><input placeholder="이 일에 할 일 추가 (!1 ~11/20)" /><button class="btn">+</button></form>
+            <button class="link small" data-act="board-filter">보드에서 보기</button>
+          </div>` : ""}
+        </article>`;
+      }).join("")}` : `<p class="muted empty-big">벌려놓은 일이 없어요. ‘+ 새로 벌린 일’로 프로젝트·공모전을 적어보세요.</p>`;
+
+    renderTimeline(list.filter((p) => p.due && !p.archived && p.stage !== "done"));
+  }
+
+  function renderTimeline(dated) {
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    const to = new Date(now.getFullYear(), now.getMonth() + 2, 0); // end of next month
+    const to = new Date(now.getFullYear(), now.getMonth() + 2, 0);
     const span = (to - from) / 86400000 + 1;
     const pos = (s) => Math.max(0, Math.min(100, ((parseYmd(s) - from) / 86400000 / span) * 100));
-    const dated = list.filter((p) => p.due && !p.archived);
     const ticks = [];
     for (let d = new Date(from); d <= to; d = addDays(d, 1)) {
       if (d.getDate() === 1 || d.getDate() === 15) ticks.push(`<span style="left:${pos(ymd(d))}%">${d.getMonth() + 1}/${d.getDate()}</span>`);
@@ -248,83 +330,31 @@
     const todayPos = pos(ymd());
     ticks.push(`<span class="today-tick" style="left:${todayPos}%">오늘</span>`);
     $("#timeline").innerHTML = dated.length ? `
-      <div class="tl-head"><b>타임라인</b><span class="muted small">${from.getMonth() + 1}월 – ${to.getMonth() + 1}월 · 진한 부분 = 완료율</span></div>
+      <div class="tl-head"><b>기간 한눈에</b><span class="muted small">${from.getMonth() + 1}월 – ${to.getMonth() + 1}월 · 진한 부분 = 완료율</span></div>
       <div class="tl-scale">${ticks.join("")}</div>
-      <div class="tl-body">${dated.sort((a, b) => a.due.localeCompare(b.due)).map((p) => {
+      <div class="tl-body">${dated.slice().sort((a, b) => a.due.localeCompare(b.due)).map((p) => {
         const s = p.start || ymd(new Date(p.createdAt));
         const l = pos(s), r = pos(p.due), w = Math.max(0.8, r - l);
         const st = projectStats(p);
         return `<div class="tl-row"><span class="nm" data-pid="${p.id}">${esc(p.name)}</span>
           <div class="tl-track"><div class="tl-bar" style="left:${l}%;width:${w}%;--c:${p.color}" title="${md(s)} – ${md(p.due)} · ${st.pct}%"><span class="fill" style="width:${st.pct}%"></span></div>
           <div class="tl-today" style="left:${todayPos}%"></div></div></div>`;
-      }).join("")}</div>` : `<div class="muted small">마감일이 있는 프로젝트가 생기면 여기에 타임라인이 표시됩니다.</div>`;
-
-    $("#projectGrid").innerHTML = list.map((p) => {
-      const st = projectStats(p);
-      const open = st.ts.filter((t) => t.status !== "done").sort(sortTasks);
-      const recentDone = st.ts.filter((t) => t.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 2);
-      return `<article class="pcard ${p.archived ? "archived" : ""}" style="--c:${p.color}" data-pid="${p.id}">
-        <div class="pcard-head"><h3 data-act="edit-project">${esc(p.name)}</h3>${ddayHtml(p)}</div>
-        <div class="range">${p.start || p.due ? `${md(p.start) || "?"} – ${md(p.due) || "?"}` : "기간 없음"}${p.archived ? " · 보관됨" : ""}</div>
-        <div class="progress"><i style="width:${st.pct}%"></i></div>
-        <div class="pstats"><span>${st.done}/${st.total} 완료 · ${st.pct}%</span><span>집중 ${fmtMin(st.min)}</span></div>
-        <ul class="ptasks">${[...open.slice(0, 6), ...recentDone].map((t) => `<li class="${t.status}" data-id="${t.id}"><span>${esc(t.title)}</span></li>`).join("")}
-          ${open.length > 6 ? `<li class="muted" data-act="board-filter">+ ${open.length - 6}개 더 보기</li>` : ""}</ul>
-        <form class="padd" data-act="padd"><input placeholder="이 프로젝트에 할 일 추가" /><button class="btn">+</button></form>
-        <div class="plinks">${p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">링크 열기 ↗</a>` : ""}<button class="link" data-act="board-filter">보드에서 보기</button></div>
-      </article>`;
-    }).join("") || `<p class="muted">프로젝트가 없어요. ‘+ 프로젝트’로 시작하세요.</p>`;
+      }).join("")}</div>` : "";
+    $("#timeline").hidden = !dated.length;
   }
 
-  function renderStats() {
-    const ws = addDays(weekStart(new Date()), ui.weekOffset * 7);
-    const days = [...Array(7)].map((_, i) => ymd(addDays(ws, i)));
-    $("#weekLabel").textContent = `${days[0].replace(/-/g, ".")} — ${md(days[6])}`;
-    const inWeek = state.sessions.filter((s) => s.date >= days[0] && s.date <= days[6]);
-    const total = inWeek.reduce((a, s) => a + s.min, 0);
-    const doneWeek = state.tasks.filter((t) => t.doneAt && ymd(new Date(t.doneAt)) >= days[0] && ymd(new Date(t.doneAt)) <= days[6]).length;
-
-    // streak: consecutive days with focus ≥ 1 min ending today/yesterday
-    const daysWith = new Set(state.sessions.map((s) => s.date));
-    let streak = 0, cur = new Date();
-    if (!daysWith.has(ymd(cur))) cur = addDays(cur, -1);
-    while (daysWith.has(ymd(cur))) { streak++; cur = addDays(cur, -1); }
-
-    $("#kpis").innerHTML = `
-      <div><b>${fmtH(total)}</b><span>이번 주 집중</span></div>
-      <div><b>${doneWeek}</b><span>완료한 할 일</span></div>
-      <div><b>${inWeek.length}</b><span>집중 세션</span></div>
-      <div><b>${streak}일</b><span>연속 집중</span></div>`;
-
-    const perDay = days.map((d) => inWeek.filter((s) => s.date === d).reduce((a, s) => a + s.min, 0));
-    const max = Math.max(60, ...perDay);
-    const today = ymd();
-    $("#dayBars").innerHTML = perDay.map((m, i) => `<div class="bar ${days[i] === today ? "today" : ""}"><span class="v">${m ? fmtH(m) : ""}</span><i style="height:${(m / max) * 100}%"></i></div>`).join("") ;
-    let lbl = $("#dayBars").nextElementSibling;
-    if (!lbl || !lbl.classList.contains("bar-labels")) { lbl = document.createElement("div"); lbl.className = "bar-labels"; $("#dayBars").after(lbl); }
-    lbl.innerHTML = days.map((d) => { const x = parseYmd(d); return `<span>${DOW[x.getDay()]} ${x.getMonth() + 1}.${x.getDate()}</span>`; }).join("");
-
-    const byProj = {};
-    inWeek.forEach((s) => (byProj[s.projectId || ""] = (byProj[s.projectId || ""] || 0) + s.min));
-    const rows = Object.entries(byProj).sort((a, b) => b[1] - a[1]);
-    const pmax = Math.max(1, ...rows.map((r) => r[1]));
-    $("#projBars").innerHTML = rows.map(([pid, m]) => {
-      const p = proj(pid);
-      return `<div class="hbar" style="--c:${p ? p.color : "var(--muted)"}"><span class="nm"><i class="dot" style="background:${p ? p.color : "var(--muted)"}"></i>${esc(p ? p.name : "프로젝트 없음")}</span><span class="track"><i style="width:${(m / pmax) * 100}%"></i></span><span class="v">${fmtH(m)}</span></div>`;
-    }).join("") || `<p class="muted small">이 주에는 집중 기록이 없어요. 할 일 옆 ▶ 버튼으로 타이머를 시작해 보세요.</p>`;
-
-    $("#sessionLog").innerHTML = inWeek.slice().sort((a, b) => b.start - a.start).map((s) => {
-      const t = task(s.taskId), p = proj(s.projectId);
-      const st = new Date(s.start);
-      return `<li data-sid="${s.id}"><span class="when">${DOW[st.getDay()]} ${md(s.date)} ${pad(st.getHours())}:${pad(st.getMinutes())}</span>
-        <span>${esc(t ? t.title : s.title || "(삭제된 작업)")}${p ? ` <span class="muted">· ${esc(p.name)}</span>` : ""}</span>
-        <span class="v">${fmtMin(s.min)}</span><button class="icon-btn" data-act="del-session" title="기록 삭제">×</button></li>`;
-    }).join("") || `<li class="empty">기록 없음</li>`;
+  function goToCommitment(pid) {
+    ui.view = "projects"; ui.expanded = pid;
+    const p = proj(pid);
+    if (p && ui.kind !== "all" && p.kind !== ui.kind) ui.kind = "all";
+    if (p && (p.archived || p.stage === "done")) ui.showArchived = true;
+    saveUi(); render();
+    $(`.c-item[data-pid="${pid}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   // ---------- quick add ----------
   function parseQuick(raw) {
-    let title = raw, projectId = null, priority = 2, due = "", est = 0;
+    let title = raw, projectId = null, priority = 2, due = "";
     title = title.replace(/(^|\s)#(\S+)/, (_, s, name) => {
       const q = name.toLowerCase();
       const p = activeProjects().find((p) => p.name.toLowerCase().includes(q));
@@ -332,21 +362,19 @@
       return _;
     });
     title = title.replace(/(^|\s)!([123])(?=\s|$)/, (_, s, n) => { priority = +n; return s; });
-    title = title.replace(/(^|\s)@(\d+)(?=\s|$)/, (_, s, n) => { est = +n; return s; });
     title = title.replace(/(^|\s)~(\d{1,2})[\/.-](\d{1,2})(?=\s|$)/, (_, s, m, d) => {
       const now = new Date(); let y = now.getFullYear();
-      const cand = new Date(y, +m - 1, +d);
-      if (cand < addDays(now, -60)) y++;
+      if (new Date(y, +m - 1, +d) < addDays(now, -60)) y++;
       due = ymd(new Date(y, +m - 1, +d)); return s;
     });
     title = title.replace(/(^|\s)~(오늘|내일)(?=\s|$)/, (_, s, w) => { due = ymd(addDays(new Date(), w === "내일" ? 1 : 0)); return s; });
-    return { title: title.replace(/\s+/g, " ").trim(), projectId, priority, due, est };
+    return { title: title.replace(/\s+/g, " ").trim(), projectId, priority, due };
   }
 
   function addTask(fields) {
     const t = {
       id: uid(), projectId: fields.projectId || "", title: fields.title, status: "todo",
-      priority: fields.priority || 2, due: fields.due || "", est: fields.est || 0, spent: 0,
+      priority: fields.priority || 2, due: fields.due || "",
       subtasks: [], note: "", pinned: fields.pinned || "", createdAt: Date.now(), doneAt: null,
     };
     state.tasks.push(t);
@@ -368,29 +396,40 @@
   // ---------- list interactions (delegated) ----------
   document.addEventListener("click", (e) => {
     const actEl = e.target.closest("[data-act]");
-    const row = e.target.closest(".task, .card, .ptasks li[data-id]");
     const act = actEl?.dataset.act;
 
-    if (act === "del-session") {
-      const sid = actEl.closest("li").dataset.sid;
-      const s = state.sessions.find((x) => x.id === sid);
-      if (s && confirm("이 집중 기록을 삭제할까요?")) {
-        const t = task(s.taskId); if (t) t.spent = Math.max(0, t.spent - s.min);
-        state.sessions = state.sessions.filter((x) => x.id !== sid); save();
-      }
-      return;
-    }
-    if (act === "edit-project") return openProject(actEl.closest(".pcard").dataset.pid);
-    if (act === "board-filter") { ui.boardFilter = actEl.closest(".pcard").dataset.pid; ui.view = "board"; saveUi(); return render(); }
-    if (e.target.closest(".tl-row .nm")) return openProject(e.target.closest(".nm").dataset.pid);
+    if (e.target.closest("[data-close]")) { e.target.closest("dialog")?.close(); return; }
+    // 사이드바 벌려놓은 일
+    const sp =e.target.closest(".spread-list .sp");
+    if (sp) return goToCommitment(sp.dataset.pid);
+    if (e.target.closest(".tl-row .nm")) return goToCommitment(e.target.closest(".nm").dataset.pid);
+    const chip = e.target.closest("[data-kind]");
+    if (chip) { ui.kind = chip.dataset.kind; saveUi(); return render(); }
 
+    if (act === "edit-project") return openProject(actEl.closest("[data-pid]").dataset.pid);
+    if (act === "board-filter") { ui.boardFilter = actEl.closest("[data-pid]").dataset.pid; ui.view = "board"; saveUi(); return render(); }
+    const nx = e.target.closest(".c-next .nx");
+    if (nx) return openTask(nx.dataset.id);
+    if (act === "expand") {
+      if (e.target.closest("select, a, input, button")) return;
+      const pid = actEl.closest("[data-pid]").dataset.pid;
+      ui.expanded = ui.expanded === pid ? null : pid; saveUi(); return render();
+    }
+
+    const row = e.target.closest(".task, .card, .ptasks li[data-id]");
     if (!row) return;
     const t = task(row.dataset.id);
     if (!t) return;
     if (act === "toggle") { setStatus(t, t.status === "done" ? "todo" : "done"); save(); if (t.status === "done") toast("완료! 🎉"); return; }
     if (act === "pin") { t.pinned = t.pinned === ymd() ? "" : ymd(); save(); return; }
-    if (act === "focus") { startTimerFor(t); return; }
     openTask(t.id);
+  });
+
+  document.addEventListener("change", (e) => {
+    if (!e.target.matches(".stage-sel")) return;
+    const p = proj(e.target.closest("[data-pid]").dataset.pid); if (!p) return;
+    p.stage = e.target.value; save();
+    toast(`‘${p.name}’ → ${STAGES[p.stage]}`);
   });
 
   document.addEventListener("submit", (e) => {
@@ -400,7 +439,8 @@
     const input = f.querySelector("input");
     const raw = input.value.trim(); if (!raw) return;
     const q = parseQuick(raw);
-    addTask({ ...q, projectId: f.closest(".pcard").dataset.pid });
+    addTask({ ...q, projectId: f.closest("[data-pid]").dataset.pid });
+    setTimeout(() => $(`.c-item[data-pid="${f.closest("[data-pid]")?.dataset.pid}"] .padd input`)?.focus(), 0);
   });
 
   // drag & drop on board
@@ -436,16 +476,13 @@
     const t = task(id); if (!t) return;
     editing = JSON.parse(JSON.stringify(t));
     $("#tTitle").value = editing.title;
-    $("#tProject").innerHTML = `<option value="">프로젝트 없음</option>` + state.projects.filter((p) => !p.archived || p.id === editing.projectId).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    $("#tProject").innerHTML = `<option value="">벌린 일 없음</option>` + state.projects.filter((p) => !p.archived || p.id === editing.projectId).sort(sortCommit).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     $("#tProject").value = editing.projectId || "";
     $("#tStatus").value = editing.status;
     $("#tPriority").value = String(editing.priority);
     $("#tDue").value = editing.due || "";
-    $("#tEst").value = editing.est || "";
     $("#tToday").checked = editing.pinned === ymd();
     $("#tNote").value = editing.note || "";
-    $("#tSpent").textContent = editing.spent ? `누적 집중 ${fmtMin(editing.spent)}` : "";
-    $("#tFocus").hidden = editing.status === "done";
     renderSubs();
     tm.showModal();
     setTimeout(() => $("#tTitle").focus(), 30);
@@ -477,7 +514,6 @@
       projectId: $("#tProject").value,
       priority: +$("#tPriority").value,
       due: $("#tDue").value,
-      est: +$("#tEst").value || 0,
       note: $("#tNote").value,
       subtasks: editing.subtasks,
       pinned: $("#tToday").checked ? ymd() : (t.pinned === ymd() ? "" : t.pinned),
@@ -485,157 +521,81 @@
     if (newStatus !== t.status) setStatus(t, newStatus);
     return t;
   }
-  tm.addEventListener("close", () => {
-    if (tm.returnValue === "save" && editing) { collectTask(); save(); }
-    editing = null; tm.returnValue = "";
+  // 저장은 dialog 'close' 이벤트 대신 form submit 시점에 처리 (더 확실함)
+  $("#taskForm").addEventListener("submit", (e) => {
+    if (e.submitter?.value === "save" && editing) { collectTask(); save(); }
+    editing = null;
   });
   $("#tDelete").addEventListener("click", () => {
     if (!confirm("이 할 일을 삭제할까요?")) return;
     state.tasks = state.tasks.filter((t) => t.id !== editing.id);
-    if (timer.taskId === editing.id) resetTimer();
     editing = null; tm.close(); save();
   });
-  $("#tFocus").addEventListener("click", () => {
-    const t = collectTask(); editing = null; tm.close(); save();
-    if (t) startTimerFor(t);
-  });
 
-  // ---------- project modal ----------
+  // ---------- commitment (project) modal ----------
   const pm = $("#projectModal");
   let editingP = null, pColor = COLORS[0];
+  $("#pKind").innerHTML = KINDS.map((k) => `<option>${k}</option>`).join("");
+  $("#pStage").innerHTML = Object.entries(STAGES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
   function openProject(id) {
     const p = id ? proj(id) : null;
     editingP = p ? p.id : null;
     $("#pName").value = p ? p.name : "";
+    $("#pKind").value = p ? p.kind : (ui.kind !== "all" ? ui.kind : "공모전");
+    $("#pStage").value = p ? p.stage : "active";
     $("#pStart").value = p ? p.start : ymd();
     $("#pDue").value = p ? p.due : "";
+    $("#pMemo").value = p ? p.memo || "" : "";
     $("#pLink").value = p ? p.link : "";
     pColor = p ? p.color : COLORS[state.projects.length % COLORS.length];
     $("#pColors").innerHTML = COLORS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" class="${c === pColor ? "sel" : ""}" aria-label="${c}"></button>`).join("");
     $("#pDelete").hidden = !p; $("#pArchive").hidden = !p;
     $("#pArchive").textContent = p && p.archived ? "보관 해제" : "보관";
     pm.showModal();
+    setTimeout(() => $("#pName").focus(), 30);
   }
   $("#pColors").addEventListener("click", (e) => {
     const b = e.target.closest("[data-c]"); if (!b) return;
     pColor = b.dataset.c; $$("#pColors button").forEach((x) => x.classList.toggle("sel", x === b));
   });
-  pm.addEventListener("close", () => {
-    if (pm.returnValue === "save") {
-      const data = { name: $("#pName").value.trim(), start: $("#pStart").value, due: $("#pDue").value, link: $("#pLink").value.trim(), color: pColor };
+  $("#projectForm").addEventListener("submit", (e) => {
+    if (e.submitter?.value === "save") {
+      const data = {
+        name: $("#pName").value.trim(), kind: $("#pKind").value, stage: $("#pStage").value,
+        start: $("#pStart").value, due: $("#pDue").value, memo: $("#pMemo").value.trim(),
+        link: $("#pLink").value.trim(), color: pColor,
+      };
       if (data.name) {
         if (editingP) Object.assign(proj(editingP), data);
-        else state.projects.push({ id: uid(), archived: false, createdAt: Date.now(), ...data });
+        else { const id = uid(); state.projects.push({ id, archived: false, createdAt: Date.now(), ...data }); ui.expanded = id; saveUi(); }
         save();
       }
     }
-    pm.returnValue = "";
   });
   $("#pDelete").addEventListener("click", () => {
     const p = proj(editingP); if (!p) return;
     const n = state.tasks.filter((t) => t.projectId === p.id).length;
-    if (!confirm(`‘${p.name}’ 프로젝트를 삭제할까요?${n ? `\n할 일 ${n}개는 ‘프로젝트 없음’으로 옮겨집니다.` : ""}`)) return;
+    if (!confirm(`‘${p.name}’을(를) 삭제할까요?${n ? `\n할 일 ${n}개는 ‘벌린 일 없음’으로 옮겨집니다.` : ""}\n(기록을 남기고 싶으면 삭제 대신 상태를 ‘끝남’으로 바꾸거나 보관하세요)`)) return;
     state.tasks.forEach((t) => { if (t.projectId === p.id) t.projectId = ""; });
     state.projects = state.projects.filter((x) => x.id !== p.id);
     pm.close(); save();
   });
   $("#pArchive").addEventListener("click", () => { const p = proj(editingP); p.archived = !p.archived; pm.close(); save(); });
   $("#addProject").addEventListener("click", () => openProject(null));
+  $("#spreadAdd").addEventListener("click", () => openProject(null));
   $("#showArchived").addEventListener("change", (e) => { ui.showArchived = e.target.checked; saveUi(); render(); });
-
-  // ---------- timer ----------
-  const MODES = { pomo: 25, long: 50, free: 0 };
-  let timer = { mode: "pomo", taskId: null, running: false, startedAt: 0, elapsed: 0 }; // elapsed ms before current run
-  try { Object.assign(timer, JSON.parse(storage.get(TIMER_KEY)) || {}); } catch { /* ignore */ }
-  const saveTimer = () => storage.set(TIMER_KEY, JSON.stringify(timer));
-  const elapsedMs = () => timer.elapsed + (timer.running ? Date.now() - timer.startedAt : 0);
-  let tick = null, notified = false;
-
-  function startTimerFor(t) {
-    if (timer.taskId && timer.taskId !== t.id && elapsedMs() > 60000) logSession();
-    if (timer.taskId !== t.id) { timer.elapsed = 0; notified = false; }
-    timer.taskId = t.id; timer.running = true; timer.startedAt = Date.now();
-    if (t.status === "todo") { setStatus(t, "doing"); save({ silent: true }); }
-    saveTimer(); ensureTick(); render();
-    toast(`‘${t.title}’ 집중 시작`);
-    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
-  }
-  function toggleTimer() {
-    if (!timer.taskId) { toast("할 일 옆 ▶ 버튼으로 작업을 골라주세요"); return; }
-    if (timer.running) { timer.elapsed = elapsedMs(); timer.running = false; }
-    else { timer.running = true; timer.startedAt = Date.now(); }
-    saveTimer(); ensureTick(); renderTimer();
-  }
-  function logSession() {
-    const min = Math.round(elapsedMs() / 60000);
-    const t = task(timer.taskId);
-    if (min >= 1 && t) {
-      const start = Date.now() - elapsedMs();
-      state.sessions.push({ id: uid(), taskId: t.id, projectId: t.projectId, title: t.title, start, date: ymd(new Date(start)), min });
-      t.spent = (t.spent || 0) + min;
-      return min;
-    }
-    return 0;
-  }
-  function resetTimer() { timer = { mode: timer.mode, taskId: null, running: false, startedAt: 0, elapsed: 0 }; notified = false; saveTimer(); renderTimer(); }
-  function stopTimer() {
-    if (!timer.taskId) return;
-    const min = logSession();
-    resetTimer(); save();
-    toast(min ? `${fmtMin(min)} 기록했어요` : "1분 미만이라 기록하지 않았어요");
-  }
-  function ensureTick() {
-    clearInterval(tick);
-    if (timer.running) tick = setInterval(renderTimer, 1000);
-  }
-  function renderTimer() {
-    const el = $("#timer");
-    const t = task(timer.taskId);
-    if (timer.taskId && !t) { resetTimer(); return; }
-    const ms = elapsedMs();
-    const goal = MODES[timer.mode] * 60000;
-    let shown = goal ? goal - ms : ms;
-    const over = goal && shown < 0;
-    shown = Math.abs(shown);
-    const s = Math.floor(shown / 1000), h = Math.floor(s / 3600);
-    const clock = (h ? `${h}:${pad(Math.floor(s / 60) % 60)}` : pad(Math.floor(s / 60))) + ":" + pad(s % 60);
-    $("#timerClock").textContent = (over ? "+" : "") + clock;
-    $("#timerTask").textContent = t ? t.title : "할 일 옆 ▶ 를 눌러 시작";
-    $("#timerToggle").textContent = timer.running ? "일시정지" : ms ? "계속" : "시작";
-    el.classList.toggle("running", timer.running);
-    $$("#timerModes button").forEach((b) => b.classList.toggle("active", b.dataset.mode === timer.mode));
-    document.title = timer.running && t ? `${(over ? "+" : "") + clock} · ${MINI_MODE ? baseTitle() : t.title}` : baseTitle();
-    // mini widget timer
-    miniEl("clock").textContent = (over ? "+" : "") + clock;
-    miniEl("ttask").textContent = t ? `▶ ${t.title}` : "할 일 옆 ▶ 로 집중 시작";
-    miniEl("tbtn").textContent = timer.running ? "일시정지" : ms ? "계속" : "시작";
-    miniRoot.classList.toggle("running", timer.running);
-    if (over && timer.running && !notified) {
-      notified = true;
-      toast("목표 시간 완료! 기록 후 종료를 눌러 저장하세요");
-      try { if (Notification.permission === "granted") new Notification("집중 시간 완료", { body: t ? t.title : "" }); } catch { /* ignore */ }
-    }
-  }
-  $("#timerToggle").addEventListener("click", toggleTimer);
-  $("#timerStop").addEventListener("click", stopTimer);
-  $("#timerModes").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-mode]"); if (!b) return;
-    timer.mode = b.dataset.mode; notified = false; saveTimer(); renderTimer();
-  });
 
   // ---------- nav & keys ----------
   $("#nav").addEventListener("click", (e) => {
     const b = e.target.closest("[data-view]"); if (!b) return;
-    ui.view = b.dataset.view; ui.weekOffset = 0; saveUi(); render();
+    ui.view = b.dataset.view; saveUi(); render();
   });
-  $("#weekPrev").addEventListener("click", () => { ui.weekOffset--; render(); });
-  $("#weekNext").addEventListener("click", () => { ui.weekOffset++; render(); });
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input, textarea, select") || document.querySelector("dialog[open]") || e.ctrlKey || e.metaKey || e.altKey) return;
-    const views = { 1: "today", 2: "board", 3: "projects", 4: "stats" };
+    const views = { 1: "today", 2: "board", 3: "projects" };
     if (views[e.key]) { ui.view = views[e.key]; saveUi(); render(); }
     else if (e.key === "n") { e.preventDefault(); ui.view = "today"; render(); $("#qaTitle").focus(); }
-    else if (e.key === " " && timer.taskId) { e.preventDefault(); toggleTimer(); }
+    else if (e.key === "p") { e.preventDefault(); openProject(null); }
   });
 
   // ---------- settings & sync ----------
@@ -654,7 +614,7 @@
     state.gistId = $("#sGist").value.trim();
     state.autoSync = $("#sAuto").checked;
   }
-  sm.addEventListener("close", () => { if (sm.returnValue === "save") { applySettings(); save({ sync: false }); updateSyncStatus(); } sm.returnValue = ""; });
+  sm.querySelector("form").addEventListener("submit", (e) => { if (e.submitter?.value === "save") { applySettings(); save({ sync: false }); updateSyncStatus(); } });
   $("#sPush").addEventListener("click", async () => { applySettings(); save({ silent: true, sync: false }); await pushGist(true); $("#sGist").value = state.gistId || ""; });
   $("#sPull").addEventListener("click", async () => { applySettings(); save({ silent: true, sync: false }); await pullGist({ force: true }); sm.close(); });
 
@@ -671,7 +631,7 @@
       if (!Array.isArray(data.tasks) || !Array.isArray(data.projects)) throw new Error("형식이 올바르지 않아요");
       if (!confirm("현재 데이터를 가져온 파일로 바꿀까요?")) return;
       const keep = { gistId: state.gistId, autoSync: state.autoSync };
-      state = { ...data, ...keep, notes: data.notes || {}, sessions: data.sessions || [] };
+      state = migrate({ ...data, ...keep });
       save(); sm.close(); toast("가져오기 완료");
     } catch (err) { alert("가져오기 실패: " + err.message); }
     e.target.value = "";
@@ -717,7 +677,7 @@
       if (!force && (remote.updatedAt || 0) <= (state.updatedAt || 0)) { updateSyncStatus(); return; }
       if (force && !confirm("Gist의 데이터로 이 브라우저의 데이터를 덮어쓸까요?")) { updateSyncStatus(); return; }
       const keep = { gistId: state.gistId, autoSync: state.autoSync };
-      state = { ...remote, ...keep };
+      state = migrate({ ...remote, ...keep });
       storage.set(KEY, JSON.stringify(state));
       render();
       setSync("최신 데이터 불러옴", "ok");
@@ -740,16 +700,17 @@
     const today = ymd(), d = new Date();
     const list = state.tasks.filter(isToday).sort(sortTasks);
     const done = state.tasks.filter((t) => t.doneAt && ymd(new Date(t.doneAt)) === today).sort((a, b) => b.doneAt - a.doneAt);
-    const focusMin = state.sessions.filter((s) => s.date === today).reduce((a, s) => a + s.min, 0);
+    const commits = openCommitments();
     miniEl("date").textContent = `${d.getMonth() + 1}.${d.getDate()} ${DOW[d.getDay()]} · TODAY`;
-    miniEl("summary").textContent = `완료 ${done.length}/${done.length + list.length} · 집중 ${fmtH(focusMin)}`;
+    miniEl("summary").textContent = `오늘 완료 ${done.length}/${done.length + list.length} · 벌린 일 ${commits.length}`;
+    miniEl("spreadCount").textContent = commits.length;
+    miniEl("spread").innerHTML = spreadItems(commits) || `<li class="empty">없음</li>`;
     const item = (t) => {
       const p = proj(t.projectId);
-      return `<li class="${t.status} ${timer.taskId === t.id ? "active" : ""}" data-id="${t.id}">
+      return `<li class="${t.status}" data-id="${t.id}">
         <button class="cb" data-mact="toggle" aria-label="완료 전환"></button>
         <div><div class="t">${t.priority === 1 && t.status !== "done" ? '<span class="pri p1">!!</span> ' : ""}${esc(t.title)}</div>
           <div class="m">${p ? `<i class="dot" style="background:${p.color}"></i>${esc(p.name)}` : ""} ${t.status !== "done" ? dueBadge(t.due, t.status) : ""}</div></div>
-        ${t.status !== "done" ? `<button class="play" data-mact="focus" title="집중 시작">▶</button>` : "<span></span>"}
       </li>`;
     };
     miniEl("list").innerHTML =
@@ -758,16 +719,20 @@
   }
 
   miniRoot.addEventListener("click", (e) => {
+    const sp = e.target.closest(".sp");
+    if (sp) {
+      if (miniRoot.ownerDocument === document && !MINI_MODE) return goToCommitment(sp.dataset.pid);
+      window.open(location.pathname, "wt-full"); return;
+    }
     const b = e.target.closest("[data-mact]"); if (!b) return;
     const act = b.dataset.mact;
     if (act === "pip") return openPip();
-    if (act === "full") { window.open(location.pathname, "_blank"); return; }
-    if (act === "ttoggle") return toggleTimer();
-    if (act === "tstop") return stopTimer();
+    if (act === "full") { window.open(location.pathname, "wt-full"); return; }
     const t = task(b.closest("li")?.dataset.id); if (!t) return;
     if (act === "toggle") { setStatus(t, t.status === "done" ? "todo" : "done"); save(); }
-    if (act === "focus") startTimerFor(t);
   });
+  miniEl("spreadBox").addEventListener("toggle", (e) => storage.set("work-tracker:miniSpread", e.target.open ? "1" : "0"));
+  if (storage.get("work-tracker:miniSpread") === "0") miniEl("spreadBox").open = false;
   miniRoot.addEventListener("submit", (e) => {
     e.preventDefault();
     const input = e.target.querySelector("input");
@@ -807,9 +772,7 @@
   // ---------- 여러 창/탭 사이 실시간 반영 ----------
   window.addEventListener("storage", (e) => {
     if (e.key === KEY && e.newValue) {
-      try { state = JSON.parse(e.newValue); render(); } catch { /* ignore */ }
-    } else if (e.key === TIMER_KEY && e.newValue) {
-      try { timer = JSON.parse(e.newValue); notified = false; ensureTick(); render(); } catch { /* ignore */ }
+      try { state = migrate(JSON.parse(e.newValue)); render(); } catch { /* ignore */ }
     }
   });
   // 다시 화면으로 돌아오면 Gist에서 최신 데이터 받기 (30초에 한 번까지)
@@ -823,7 +786,7 @@
 
   // ---------- boot ----------
   storage.set(KEY, JSON.stringify(state));
-  render(); ensureTick(); updateSyncStatus();
+  render(); updateSyncStatus();
   if (state.autoSync) pullGist();
   // 날짜가 바뀌면 다시 그리기
   let lastDay = ymd();

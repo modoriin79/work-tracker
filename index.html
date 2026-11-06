@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Work Tracker</title>
-  <meta name="description" content="프로젝트 · 할 일 · 집중 시간을 한 곳에서 추적하는 개인 작업 트래커" />
+  <meta name="description" content="벌려놓은 프로젝트·공모전과 할 일을 한눈에 정리하는 개인 작업 트래커" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23171512'/><path d='M8 16l5 5 11-11' stroke='%23f6f1e7' stroke-width='3.5' fill='none'/></svg>" />
@@ -20,23 +20,18 @@
       <nav class="nav" id="nav">
         <button data-view="today" class="active"><span>오늘</span><kbd>1</kbd></button>
         <button data-view="board"><span>보드</span><kbd>2</kbd></button>
-        <button data-view="projects"><span>프로젝트</span><kbd>3</kbd></button>
-        <button data-view="stats"><span>기록</span><kbd>4</kbd></button>
+        <button data-view="projects"><span>벌린 일</span><kbd>3</kbd></button>
       </nav>
 
-      <section class="timer" id="timer">
-        <div class="eyebrow">FOCUS</div>
-        <div class="timer-task" id="timerTask">작업을 선택하고 시작하세요</div>
-        <div class="timer-clock" id="timerClock">25:00</div>
-        <div class="timer-modes" id="timerModes">
-          <button data-mode="pomo" class="active">25분</button>
-          <button data-mode="long">50분</button>
-          <button data-mode="free">스톱워치</button>
+      <section class="spread" id="spread">
+        <div class="spread-head">
+          <div>
+            <div class="eyebrow">IN PROGRESS</div>
+            <b>벌려놓은 일 <span id="spreadCount"></span></b>
+          </div>
+          <button class="icon-btn add-c" id="spreadAdd" title="새로 벌린 일 추가">＋</button>
         </div>
-        <div class="timer-actions">
-          <button class="btn solid" id="timerToggle">시작</button>
-          <button class="btn" id="timerStop">기록 후 종료</button>
-        </div>
+        <ul class="spread-list" id="spreadList"></ul>
       </section>
 
       <button class="btn mini-launch" id="openMini" title="다른 창 위에 항상 떠 있는 작은 창">📌 작은 창으로 띄우기</button>
@@ -63,7 +58,7 @@
           <select id="qaProject"></select>
           <button class="btn solid" type="submit">추가</button>
         </form>
-        <p class="hint"><b>#프로젝트</b> 이름 일부 · <b>!1</b>~<b>!3</b> 우선순위 · <b>~11/10</b> 마감일 · <b>@30</b> 예상 30분 — 오늘 추가한 일은 자동으로 ‘오늘’에 고정됩니다.</p>
+        <p class="hint"><b>#이름</b> 벌린 일 이름 일부 · <b>!1</b>~<b>!3</b> 우선순위 · <b>~11/10</b>, <b>~내일</b> 마감일 — 오늘 추가한 일은 자동으로 ‘오늘’에 고정됩니다.</p>
 
         <div class="cols-2">
           <div>
@@ -97,48 +92,26 @@
         </div>
       </section>
 
-      <!-- PROJECTS -->
+      <!-- COMMITMENTS -->
       <section class="view" id="view-projects" hidden>
         <header class="view-head">
           <div>
-            <div class="eyebrow">PROJECTS</div>
-            <h2>프로젝트</h2>
+            <div class="eyebrow">EVERYTHING I STARTED</div>
+            <h2>벌려놓은 일</h2>
           </div>
-          <div class="row-gap">
-            <label class="check-inline"><input type="checkbox" id="showArchived" /> 보관함 보기</label>
-            <button class="btn solid" id="addProject">+ 프로젝트</button>
-          </div>
+          <div class="head-stats" id="cStats"></div>
         </header>
-        <div class="timeline" id="timeline"></div>
-        <div class="project-grid" id="projectGrid"></div>
-      </section>
 
-      <!-- STATS -->
-      <section class="view" id="view-stats" hidden>
-        <header class="view-head">
-          <div>
-            <div class="eyebrow">REFLECT</div>
-            <h2>기록</h2>
-          </div>
-          <div class="week-nav">
-            <button class="link" id="weekPrev">← 이전 주</button>
-            <span id="weekLabel"></span>
-            <button class="link" id="weekNext">다음 주 →</button>
-          </div>
-        </header>
-        <div class="kpis" id="kpis"></div>
-        <div class="cols-2">
-          <div>
-            <h3 class="sec-title">요일별 집중 시간</h3>
-            <div class="bars" id="dayBars"></div>
-          </div>
-          <div>
-            <h3 class="sec-title">프로젝트별 집중 시간</h3>
-            <div id="projBars"></div>
+        <div class="c-toolbar">
+          <div class="chips" id="kindChips"></div>
+          <div class="row-gap">
+            <label class="check-inline"><input type="checkbox" id="showArchived" /> 끝난 일 · 보관함 포함</label>
+            <button class="btn solid" id="addProject">+ 새로 벌린 일</button>
           </div>
         </div>
-        <h3 class="sec-title">집중 세션 로그</h3>
-        <ul class="log" id="sessionLog"></ul>
+
+        <div class="c-list" id="cList"></div>
+        <div class="timeline" id="timeline"></div>
       </section>
     </main>
   </div>
@@ -148,10 +121,10 @@
     <form method="dialog" id="taskForm">
       <div class="modal-head">
         <input id="tTitle" class="title-input" placeholder="할 일 제목" required />
-        <button class="x" value="cancel" formnovalidate aria-label="닫기">×</button>
+        <button type="button" class="x" data-close aria-label="닫기">×</button>
       </div>
       <div class="grid-fields">
-        <label>프로젝트<select id="tProject"></select></label>
+        <label>벌린 일<select id="tProject"></select></label>
         <label>상태<select id="tStatus">
           <option value="todo">할 일</option><option value="doing">진행 중</option><option value="done">완료</option>
         </select></label>
@@ -159,35 +132,34 @@
           <option value="1">높음</option><option value="2">보통</option><option value="3">낮음</option>
         </select></label>
         <label>마감일<input type="date" id="tDue" /></label>
-        <label>예상 시간(분)<input type="number" min="0" step="5" id="tEst" /></label>
-        <label class="check-inline pin"><input type="checkbox" id="tToday" /> 오늘 할 일에 고정</label>
+        <label class="check-inline pin span-rest"><input type="checkbox" id="tToday" /> 오늘 할 일에 고정</label>
       </div>
-      <div class="sub-head">
-        <h4>체크리스트</h4><span id="tSpent" class="muted"></span>
-      </div>
+      <div class="sub-head"><h4>체크리스트</h4></div>
       <ul id="tSubs" class="subs"></ul>
       <div class="sub-add"><input id="tSubInput" placeholder="세부 단계 추가 후 Enter" /></div>
       <label class="block">메모<textarea id="tNote" rows="3" placeholder="참고 링크, 진행 상황 등"></textarea></label>
       <div class="modal-foot">
         <button type="button" class="btn danger" id="tDelete">삭제</button>
         <span class="spacer"></span>
-        <button type="button" class="btn" id="tFocus">이 작업 집중 시작</button>
         <button class="btn solid" value="save" id="tSave">저장</button>
       </div>
     </form>
   </dialog>
 
-  <!-- Project modal -->
+  <!-- Commitment (project) modal -->
   <dialog id="projectModal" class="modal narrow">
     <form method="dialog" id="projectForm">
       <div class="modal-head">
-        <input id="pName" class="title-input" placeholder="프로젝트 이름" required />
-        <button class="x" value="cancel" formnovalidate aria-label="닫기">×</button>
+        <input id="pName" class="title-input" placeholder="벌린 일 이름 (예: AI-X 공모전)" required />
+        <button type="button" class="x" data-close aria-label="닫기">×</button>
       </div>
-      <div class="grid-fields">
+      <div class="grid-fields two">
+        <label>종류<select id="pKind"></select></label>
+        <label>상태<select id="pStage"></select></label>
         <label>시작일<input type="date" id="pStart" /></label>
         <label>마감일<input type="date" id="pDue" /></label>
-        <label class="span2">링크 (노션 등)<input type="url" id="pLink" placeholder="https://" /></label>
+        <label class="span2">한 줄 메모 <span class="muted">(목표 · 상금 · 제출물 · 팀원 등)</span><input id="pMemo" placeholder="예: 기획서 5p 제출, 대상 300만원" /></label>
+        <label class="span2">링크 (공고 · 노션 등)<input type="url" id="pLink" placeholder="https://" /></label>
         <label class="span2">색상<div class="swatches" id="pColors"></div></label>
       </div>
       <div class="modal-foot">
@@ -204,13 +176,13 @@
     <form method="dialog">
       <div class="modal-head">
         <h3>설정 · 동기화</h3>
-        <button class="x" value="cancel" aria-label="닫기">×</button>
+        <button type="button" class="x" data-close aria-label="닫기">×</button>
       </div>
       <label class="block">이름<input id="sName" /></label>
 
       <h4>기기 간 동기화 (GitHub Gist)</h4>
       <p class="muted small">
-        데이터는 기본적으로 이 브라우저에만 저장됩니다. 노트북·휴대폰에서 같이 쓰려면
+        데이터는 기본적으로 이 브라우저에만 저장됩니다. 노트북·아이패드에서 같이 쓰려면
         <a href="https://github.com/settings/tokens/new?scopes=gist&description=work-tracker" target="_blank" rel="noopener">gist 권한만 있는 토큰</a>을 만들어 아래에 붙여넣으세요.
         토큰은 이 브라우저에만 저장되며, 데이터는 비공개(secret) Gist에 저장됩니다.
       </p>
@@ -246,14 +218,12 @@
         <button type="button" data-mact="full" title="전체 화면 열기">↗</button>
       </div>
     </div>
-    <div class="mini-timer">
-      <div class="mini-ttask" data-m="ttask"></div>
-      <div class="mini-clock" data-m="clock">25:00</div>
-      <button type="button" data-mact="ttoggle" data-m="tbtn">시작</button>
-      <button type="button" data-mact="tstop" title="기록 후 종료">■</button>
-    </div>
+    <details class="mini-spread" data-m="spreadBox" open>
+      <summary>벌려놓은 일 <span data-m="spreadCount"></span></summary>
+      <ul data-m="spread"></ul>
+    </details>
     <form data-m="add" class="mini-add" autocomplete="off">
-      <input placeholder="+ 할 일  (#프로젝트 !1 ~11/10)" />
+      <input placeholder="+ 할 일  (#이름 !1 ~11/10)" />
     </form>
     <ul class="mini-list" data-m="list"></ul>
   </div>
