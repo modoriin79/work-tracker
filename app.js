@@ -97,7 +97,7 @@
   if (!["today", "board", "projects"].includes(ui.view)) ui.view = "today";
   const MINI_MODE = new URLSearchParams(location.search).has("mini");
   const baseTitle = () => (MINI_MODE ? "Work Tracker Mini" : `${state.name || "나"}의 작업실 · Work Tracker`);
-  const saveUi = () => storage.set(UI_KEY, JSON.stringify({ view: ui.view, boardFilter: ui.boardFilter, showArchived: ui.showArchived, kind: ui.kind, expanded: ui.expanded }));
+  const saveUi = () => storage.set(UI_KEY, JSON.stringify({ view: ui.view, boardFilter: ui.boardFilter, boardShowDone: ui.boardShowDone, showArchived: ui.showArchived, kind: ui.kind, expanded: ui.expanded }));
 
   function save({ silent = false, sync = true } = {}) {
     state.updatedAt = Date.now();
@@ -251,23 +251,29 @@
     if (document.activeElement !== note) note.value = state.notes[today] || "";
   }
 
+  // 메모장: 할 일 하나하나를 메모 카드로
+  let noteQuery = "";
   function renderBoard() {
     const f = ui.boardFilter;
-    const tasks = state.tasks.filter((t) => f === "all" || t.projectId === f);
-    $$("#board .col").forEach((col) => {
-      const st = col.dataset.status;
-      let items = tasks.filter((t) => t.status === st);
-      items = st === "done" ? items.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 30) : items.sort(sortTasks);
-      col.querySelector(".count").textContent = tasks.filter((t) => t.status === st).length;
-      col.querySelector("ul").innerHTML = items.map((t) => {
-        const p = proj(t.projectId);
-        const subsDone = t.subtasks.filter((s) => s.done).length;
-        return `<li class="card" draggable="true" data-id="${t.id}" style="--c:${p ? p.color : "var(--line)"}">
-          <div class="t-title">${t.priority < 3 && st !== "done" ? `<span class="pri p${t.priority}">${t.priority === 1 ? "!!" : "!"}</span> ` : ""}${esc(t.title)}</div>
-          <div class="meta">${p ? `<span>${esc(p.name)}</span>` : ""}${dueBadge(t.due, t.status)}${t.subtasks.length ? `<span>☰ ${subsDone}/${t.subtasks.length}</span>` : ""}</div>
-        </li>`;
-      }).join("");
-    });
+    $("#boardShowDone").checked = !!ui.boardShowDone;
+    const q = noteQuery.trim().toLowerCase();
+    const items = state.tasks
+      .filter((t) => (f === "all" || t.projectId === f) && (ui.boardShowDone || t.status !== "done"))
+      .filter((t) => !q || (t.title + "\n" + (t.note || "")).toLowerCase().includes(q))
+      .sort((a, b) => (a.status === "done") - (b.status === "done") || (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+    $("#board").innerHTML = items.map((t) => {
+      const p = proj(t.projectId);
+      const subsDone = t.subtasks.filter((s) => s.done).length;
+      const done = t.status === "done";
+      return `<article class="card memo ${done ? "done" : ""}" data-id="${t.id}" style="--c:${p ? p.color : "var(--line-strong)"}" tabindex="0">
+        <div class="memo-top">
+          <button class="memo-check" data-act="toggle" title="${done ? "다시 열기" : "끝냄으로 표시"}">${done ? "✓" : ""}</button>
+          <h3>${t.priority === 1 && !done ? `<span class="pri p1">!!</span> ` : ""}${esc(t.title)}</h3>
+        </div>
+        ${t.note ? `<p class="memo-text">${esc(t.note)}</p>` : `<p class="memo-text empty">눌러서 내용 쓰기…</p>`}
+        <div class="meta">${p ? `<span class="memo-proj">${esc(p.name)}</span>` : ""}${dueBadge(t.due, t.status)}${t.subtasks.length ? `<span>☰ ${subsDone}/${t.subtasks.length}</span>` : ""}<span class="memo-date">${md(ymd(new Date(t.updatedAt || t.createdAt)))}</span></div>
+      </article>`;
+    }).join("") || `<p class="muted empty-big">${q ? "검색 결과가 없어요." : "메모가 없어요. ‘+ 새 메모’로 할 일을 적어보세요."}</p>`;
   }
 
   // 벌려놓은 일 전체 목록
@@ -309,12 +315,12 @@
           ${open ? `<div class="c-body">
             <ul class="ptasks">${[...st.open, ...recentDone].map((t) => `<li class="${t.status}" data-id="${t.id}"><span>${esc(t.title)}</span>${t.due && t.status !== "done" ? dueBadge(t.due, t.status) : ""}</li>`).join("") || `<li class="muted none">아직 할 일이 없어요</li>`}</ul>
             <form class="padd" data-act="padd"><input placeholder="이 일에 할 일 추가 (!1 ~11/20)" /><button class="btn">+</button></form>
-            <button class="link small" data-act="board-filter">보드에서 보기</button>
+            <button class="link small" data-act="board-filter">메모장에서 보기</button>
           </div>` : ""}
         </article>`;
       }).join("")}` : `<p class="muted empty-big">벌려놓은 일이 없어요. ‘+ 새로 벌린 일’로 프로젝트·공모전을 적어보세요.</p>`;
 
-    renderTimeline(list.filter((p) => p.due && !p.archived && p.stage !== "done"));
+    renderTimeline(openCommitments().filter((p) => p.due));
   }
 
   function renderTimeline(dated) {
@@ -339,8 +345,7 @@
         return `<div class="tl-row"><span class="nm" data-pid="${p.id}">${esc(p.name)}</span>
           <div class="tl-track"><div class="tl-bar" style="left:${l}%;width:${w}%;--c:${p.color}" title="${md(s)} – ${md(p.due)} · ${st.pct}%"><span class="fill" style="width:${st.pct}%"></span></div>
           <div class="tl-today" style="left:${todayPos}%"></div></div></div>`;
-      }).join("")}</div>` : "";
-    $("#timeline").hidden = !dated.length;
+      }).join("")}</div>` : `<div class="tl-head"><b>기간 한눈에</b></div><p class="muted small tl-empty">벌린 일에 마감일을 넣으면 여기에 기간이 막대로 표시돼요.</p>`;
   }
 
   function goToCommitment(pid) {
@@ -443,20 +448,14 @@
     setTimeout(() => $(`.c-item[data-pid="${f.closest("[data-pid]")?.dataset.pid}"] .padd input`)?.focus(), 0);
   });
 
-  // drag & drop on board
-  let dragId = null;
-  $("#board").addEventListener("dragstart", (e) => { const c = e.target.closest(".card"); if (!c) return; dragId = c.dataset.id; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
-  $("#board").addEventListener("dragend", (e) => { e.target.closest(".card")?.classList.remove("dragging"); $$(".col").forEach((c) => c.classList.remove("drag-over")); });
-  $$("#board .col").forEach((col) => {
-    col.addEventListener("dragover", (e) => { e.preventDefault(); col.classList.add("drag-over"); });
-    col.addEventListener("dragleave", (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove("drag-over"); });
-    col.addEventListener("drop", (e) => {
-      e.preventDefault(); col.classList.remove("drag-over");
-      const t = task(dragId); if (!t) return;
-      if (t.status !== col.dataset.status) { setStatus(t, col.dataset.status); save(); }
-    });
-  });
+  // 메모장 controls
   $("#boardFilter").addEventListener("change", (e) => { ui.boardFilter = e.target.value; saveUi(); render(); });
+  $("#boardShowDone").addEventListener("change", (e) => { ui.boardShowDone = e.target.checked; saveUi(); render(); });
+  $("#noteSearch").addEventListener("input", (e) => { noteQuery = e.target.value; renderBoard(); });
+  $("#newNote").addEventListener("click", () => newNote());
+  $("#board").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches(".memo")) openTask(e.target.dataset.id);
+  });
 
   // daily note
   let noteTimer;
@@ -472,22 +471,34 @@
   // ---------- task modal ----------
   let editing = null; // working copy
   const tm = $("#taskModal");
-  function openTask(id) {
-    const t = task(id); if (!t) return;
+  function openTask(id, draft) {
+    const t = draft || task(id); if (!t) return;
     editing = JSON.parse(JSON.stringify(t));
+    if (draft) editing.isNew = true;
     $("#tTitle").value = editing.title;
     $("#tProject").innerHTML = `<option value="">벌린 일 없음</option>` + state.projects.filter((p) => !p.archived || p.id === editing.projectId).sort(sortCommit).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     $("#tProject").value = editing.projectId || "";
-    $("#tStatus").value = editing.status;
+    $("#tDone").checked = editing.status === "done";
     $("#tPriority").value = String(editing.priority);
     $("#tDue").value = editing.due || "";
     $("#tToday").checked = editing.pinned === ymd();
     $("#tNote").value = editing.note || "";
+    $("#tSubsBox").open = editing.subtasks.length > 0;
+    $("#tDelete").hidden = !!draft;
     renderSubs();
     tm.showModal();
-    setTimeout(() => $("#tTitle").focus(), 30);
+    setTimeout(() => (draft || !editing.title ? $("#tTitle") : $("#tNote")).focus(), 30);
+  }
+  function newNote() {
+    const f = ui.view === "board" && ui.boardFilter !== "all" ? ui.boardFilter : "";
+    openTask(null, {
+      id: uid(), projectId: f, title: "", status: "todo", priority: 2, due: "",
+      subtasks: [], note: "", pinned: "", createdAt: Date.now(), doneAt: null,
+    });
   }
   function renderSubs() {
+    const d = editing.subtasks.filter((s) => s.done).length;
+    $("#tSubsCount").textContent = editing.subtasks.length ? `${d}/${editing.subtasks.length}` : "";
     $("#tSubs").innerHTML = editing.subtasks.map((s) => `<li class="${s.done ? "done" : ""}" data-sid="${s.id}">
       <input type="checkbox" ${s.done ? "checked" : ""} /><span>${esc(s.text)}</span><button type="button" class="icon-btn" data-sub-del>×</button></li>`).join("");
   }
@@ -507,10 +518,18 @@
     e.target.value = ""; renderSubs();
   });
   function collectTask() {
-    const t = task(editing.id); if (!t) return null;
-    const newStatus = $("#tStatus").value;
+    const noteV = $("#tNote").value;
+    const titleV = $("#tTitle").value.trim() || noteV.trim().split("\n")[0].slice(0, 60).trim();
+    let t = task(editing.id);
+    if (!t) {
+      if (!editing.isNew || (!titleV && !noteV.trim())) return null; // 빈 새 메모는 만들지 않음
+      const { isNew, ...base } = editing;
+      t = base; state.tasks.push(t);
+    }
+    const newStatus = $("#tDone").checked ? "done" : (t.status === "done" ? "todo" : t.status);
     Object.assign(t, {
-      title: $("#tTitle").value.trim() || t.title,
+      updatedAt: Date.now(),
+      title: titleV || t.title || "제목 없음",
       projectId: $("#tProject").value,
       priority: +$("#tPriority").value,
       due: $("#tDue").value,
@@ -523,7 +542,12 @@
   }
   // 저장은 dialog 'close' 이벤트 대신 form submit 시점에 처리 (더 확실함)
   $("#taskForm").addEventListener("submit", (e) => {
-    if (e.submitter?.value === "save" && editing) { collectTask(); save(); }
+    if (e.submitter?.value === "save" && editing) { if (collectTask()) save(); }
+    editing = null;
+  });
+  // Esc로 닫아도 쓴 내용은 저장 (메모장처럼)
+  tm.addEventListener("cancel", () => {
+    if (editing && collectTask()) save();
     editing = null;
   });
   $("#tDelete").addEventListener("click", () => {
@@ -594,6 +618,7 @@
     if (e.target.matches("input, textarea, select") || document.querySelector("dialog[open]") || e.ctrlKey || e.metaKey || e.altKey) return;
     const views = { 1: "today", 2: "board", 3: "projects" };
     if (views[e.key]) { ui.view = views[e.key]; saveUi(); render(); }
+    else if (e.key === "n" && ui.view === "board") { e.preventDefault(); newNote(); }
     else if (e.key === "n") { e.preventDefault(); ui.view = "today"; render(); $("#qaTitle").focus(); }
     else if (e.key === "p") { e.preventDefault(); openProject(null); }
   });

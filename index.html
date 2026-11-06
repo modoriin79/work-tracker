@@ -19,7 +19,7 @@
 
       <nav class="nav" id="nav">
         <button data-view="today" class="active"><span>오늘</span><kbd>1</kbd></button>
-        <button data-view="board"><span>보드</span><kbd>2</kbd></button>
+        <button data-view="board"><span>메모장</span><kbd>2</kbd></button>
         <button data-view="projects"><span>벌린 일</span><kbd>3</kbd></button>
       </nav>
 
@@ -80,16 +80,19 @@
       <section class="view" id="view-board" hidden>
         <header class="view-head">
           <div>
-            <div class="eyebrow">KANBAN</div>
-            <h2>작업 보드</h2>
+            <div class="eyebrow">NOTES</div>
+            <h2>작업 메모장</h2>
           </div>
-          <select id="boardFilter" class="filter"></select>
+          <div class="row-gap">
+            <select id="boardFilter" class="filter" aria-label="벌린 일로 거르기"></select>
+            <button class="btn solid" id="newNote">+ 새 메모</button>
+          </div>
         </header>
-        <div class="board" id="board">
-          <div class="col" data-status="todo"><h3>할 일 <span class="count"></span></h3><ul></ul></div>
-          <div class="col" data-status="doing"><h3>진행 중 <span class="count"></span></h3><ul></ul></div>
-          <div class="col" data-status="done"><h3>완료 <span class="count"></span></h3><ul></ul></div>
+        <div class="memo-tools">
+          <input id="noteSearch" class="memo-search" placeholder="메모 검색…" autocomplete="off" />
+          <label class="check-inline"><input type="checkbox" id="boardShowDone" /> 끝낸 메모도 보기</label>
         </div>
+        <div class="memo-grid" id="board"></div>
       </section>
 
       <!-- COMMITMENTS -->
@@ -102,6 +105,8 @@
           <div class="head-stats" id="cStats"></div>
         </header>
 
+        <div class="timeline" id="timeline"></div>
+
         <div class="c-toolbar">
           <div class="chips" id="kindChips"></div>
           <div class="row-gap">
@@ -111,33 +116,32 @@
         </div>
 
         <div class="c-list" id="cList"></div>
-        <div class="timeline" id="timeline"></div>
       </section>
     </main>
   </div>
 
   <!-- Task modal -->
-  <dialog id="taskModal" class="modal">
+  <dialog id="taskModal" class="modal note-modal">
     <form method="dialog" id="taskForm">
       <div class="modal-head">
-        <input id="tTitle" class="title-input" placeholder="할 일 제목" required />
-        <button type="button" class="x" data-close aria-label="닫기">×</button>
+        <input id="tTitle" class="title-input" placeholder="제목" />
+        <button class="x" value="save" aria-label="저장하고 닫기" title="저장하고 닫기">×</button>
       </div>
+      <textarea id="tNote" class="note-body" placeholder="자유롭게 적어두세요. 아이디어, 진행 상황, 참고 링크, 해야 할 것들…"></textarea>
       <div class="grid-fields">
         <label>벌린 일<select id="tProject"></select></label>
-        <label>상태<select id="tStatus">
-          <option value="todo">할 일</option><option value="doing">진행 중</option><option value="done">완료</option>
-        </select></label>
         <label>우선순위<select id="tPriority">
           <option value="1">높음</option><option value="2">보통</option><option value="3">낮음</option>
         </select></label>
         <label>마감일<input type="date" id="tDue" /></label>
-        <label class="check-inline pin span-rest"><input type="checkbox" id="tToday" /> 오늘 할 일에 고정</label>
+        <label class="check-inline pin"><input type="checkbox" id="tToday" /> 오늘 할 일에 고정</label>
+        <label class="check-inline pin"><input type="checkbox" id="tDone" /> 끝냄</label>
       </div>
-      <div class="sub-head"><h4>체크리스트</h4></div>
-      <ul id="tSubs" class="subs"></ul>
-      <div class="sub-add"><input id="tSubInput" placeholder="세부 단계 추가 후 Enter" /></div>
-      <label class="block">메모<textarea id="tNote" rows="3" placeholder="참고 링크, 진행 상황 등"></textarea></label>
+      <details class="subs-box" id="tSubsBox">
+        <summary>체크리스트 <span class="muted small" id="tSubsCount"></span></summary>
+        <ul id="tSubs" class="subs"></ul>
+        <div class="sub-add"><input id="tSubInput" placeholder="세부 단계 추가 후 Enter" /></div>
+      </details>
       <div class="modal-foot">
         <button type="button" class="btn danger" id="tDelete">삭제</button>
         <span class="spacer"></span>
