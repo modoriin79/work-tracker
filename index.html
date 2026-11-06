@@ -39,6 +39,8 @@
         </div>
       </section>
 
+      <button class="btn mini-launch" id="openMini" title="다른 창 위에 항상 떠 있는 작은 창">📌 작은 창으로 띄우기</button>
+
       <div class="side-foot">
         <span id="syncStatus" class="sync-status">로컬 저장</span>
         <button class="link" id="openSettings">설정 · 동기화</button>
@@ -231,6 +233,30 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Mini widget: ?mini 로 열거나, 📌 버튼으로 항상 위 창(PiP)에 띄움 -->
+  <div id="mini" class="mini" hidden>
+    <div class="mini-head">
+      <div>
+        <div class="eyebrow" data-m="date"></div>
+        <div class="mini-sum" data-m="summary"></div>
+      </div>
+      <div class="mini-tools">
+        <button type="button" data-mact="pip" title="항상 위에 띄우기">📌</button>
+        <button type="button" data-mact="full" title="전체 화면 열기">↗</button>
+      </div>
+    </div>
+    <div class="mini-timer">
+      <div class="mini-ttask" data-m="ttask"></div>
+      <div class="mini-clock" data-m="clock">25:00</div>
+      <button type="button" data-mact="ttoggle" data-m="tbtn">시작</button>
+      <button type="button" data-mact="tstop" title="기록 후 종료">■</button>
+    </div>
+    <form data-m="add" class="mini-add" autocomplete="off">
+      <input placeholder="+ 할 일  (#프로젝트 !1 ~11/10)" />
+    </form>
+    <ul class="mini-list" data-m="list"></ul>
+  </div>
 
   <div id="toast" class="toast" role="status"></div>
   <script src="app.js"></script>

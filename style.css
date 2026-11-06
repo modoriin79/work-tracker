@@ -256,6 +256,39 @@ input:focus, select:focus, textarea:focus { border-color: var(--line-strong); }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: 10px 18px; font-size: 14px; opacity: 0; pointer-events: none; transition: all .2s; z-index: 50; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* mini widget */
+.mini-launch { width: 100%; }
+body.mini-mode .app, body.mini-mode .mini-launch { display: none; }
+body.mini-mode { background: var(--bg); }
+.mini { display: flex; flex-direction: column; height: 100vh; padding: 12px 14px; gap: 10px; font-size: 14px; }
+.mini-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--line-strong); padding-bottom: 8px; }
+.mini-head .eyebrow { font-size: 10.5px; letter-spacing: .16em; }
+.mini-sum { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.mini-tools { display: flex; gap: 4px; }
+.mini-tools button { background: none; border: 1px solid var(--line); width: 28px; height: 28px; cursor: pointer; font-size: 13px; padding: 0; }
+.mini-tools button:hover { border-color: var(--ink); }
+body.pip .mini-tools [data-mact="pip"] { display: none; }
+.mini-timer { display: grid; grid-template-columns: 1fr auto auto; grid-template-rows: auto auto; gap: 2px 6px; align-items: center; border: 1px solid var(--line-strong); padding: 8px 10px; background: var(--panel); }
+.mini-ttask { grid-column: 1 / -1; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-clock { font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.1; }
+.mini.running .mini-clock { font-weight: 500; }
+.mini-timer button { border: 1px solid var(--line-strong); background: transparent; cursor: pointer; padding: 5px 10px; font-size: 13px; }
+.mini-timer [data-mact="ttoggle"] { background: var(--ink); color: var(--bg); }
+.mini-add input { width: 100%; padding: 7px 9px; font-size: 13.5px; }
+.mini-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; border-top: 1px solid var(--line); }
+.mini-list li { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.mini-list .cb { width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--ink); background: none; padding: 0; cursor: pointer; display: grid; place-items: center; }
+.mini-list li.done .cb { background: var(--ink); }
+.mini-list li.done .cb::after { content: ""; width: 4px; height: 8px; border: solid var(--bg); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.mini-list li.doing .cb { background: linear-gradient(135deg, transparent 50%, var(--ink) 50%); }
+.mini-list .t { cursor: default; word-break: break-word; line-height: 1.35; }
+.mini-list li.done .t { text-decoration: line-through; color: var(--muted); }
+.mini-list .m { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.mini-list .play { background: none; border: 1px solid transparent; cursor: pointer; font-size: 11px; padding: 2px 5px; color: var(--ink-2); }
+.mini-list .play:hover, .mini-list li.active .play { border-color: var(--ink); }
+.mini-list .sep { display: block; font-size: 11px; color: var(--muted); letter-spacing: .1em; padding: 10px 0 4px; border-bottom: 1px solid var(--line); }
+.mini-list .empty { padding: 12px 0; }
+
 /* responsive */
 @media (max-width: 1000px) {
   .cols-2 { grid-template-columns: 1fr; gap: 0; }

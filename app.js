@@ -73,6 +73,8 @@
   let ui = { view: "today", boardFilter: "all", showArchived: false, weekOffset: 0 };
   try { Object.assign(ui, JSON.parse(storage.get(UI_KEY)) || {}); } catch { /* ignore */ }
   ui.weekOffset = 0;
+  const MINI_MODE = new URLSearchParams(location.search).has("mini");
+  const baseTitle = () => (MINI_MODE ? "Work Tracker Mini" : `${state.name || "나"}의 작업실 · Work Tracker`);
   const saveUi = () => storage.set(UI_KEY, JSON.stringify({ view: ui.view, boardFilter: ui.boardFilter, showArchived: ui.showArchived }));
 
   function save({ silent = false, sync = true } = {}) {
@@ -104,7 +106,11 @@
   function setStatus(t, status) {
     t.status = status;
     t.doneAt = status === "done" ? Date.now() : null;
-    if (status === "done") t.subtasks.forEach((s) => (s.done = s.done)); // keep
+    // 타이머가 돌던 작업을 완료하면 시간 기록 후 타이머 종료
+    if (status === "done" && timer.taskId === t.id) {
+      const min = logSession(); resetTimer();
+      if (min) setTimeout(() => toast(`${fmtMin(min)} 기록하고 완료했어요`), 300);
+    }
   }
 
   function dueBadge(due, status) {
@@ -144,12 +150,13 @@
 
   // ---------- render ----------
   function render() {
-    document.title = `${state.name || "나"}의 작업실 · Work Tracker`;
+    document.title = baseTitle();
     $("#ownerName").textContent = state.name || "나";
     $$("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === ui.view));
     $$(".view").forEach((v) => (v.hidden = v.id !== `view-${ui.view}`));
     fillProjectSelects();
     ({ today: renderToday, board: renderBoard, projects: renderProjects, stats: renderStats })[ui.view]();
+    renderMini();
     renderTimer();
   }
 
@@ -597,7 +604,12 @@
     $("#timerToggle").textContent = timer.running ? "일시정지" : ms ? "계속" : "시작";
     el.classList.toggle("running", timer.running);
     $$("#timerModes button").forEach((b) => b.classList.toggle("active", b.dataset.mode === timer.mode));
-    document.title = timer.running && t ? `${(over ? "+" : "") + clock} · ${t.title}` : `${state.name || "나"}의 작업실 · Work Tracker`;
+    document.title = timer.running && t ? `${(over ? "+" : "") + clock} · ${MINI_MODE ? baseTitle() : t.title}` : baseTitle();
+    // mini widget timer
+    miniEl("clock").textContent = (over ? "+" : "") + clock;
+    miniEl("ttask").textContent = t ? `▶ ${t.title}` : "할 일 옆 ▶ 로 집중 시작";
+    miniEl("tbtn").textContent = timer.running ? "일시정지" : ms ? "계속" : "시작";
+    miniRoot.classList.toggle("running", timer.running);
     if (over && timer.running && !notified) {
       notified = true;
       toast("목표 시간 완료! 기록 후 종료를 눌러 저장하세요");
@@ -717,6 +729,97 @@
     if (!state.autoSync || !state.gistId || !storage.get(TOKEN_KEY)) return;
     clearTimeout(syncT); syncT = setTimeout(() => pushGist(false), 2500);
   }
+
+  // ---------- mini widget ----------
+  const miniRoot = $("#mini");
+  const miniEl = (k) => miniRoot.querySelector(`[data-m="${k}"]`);
+  let pipWin = null;
+
+  function renderMini() {
+    if (miniRoot.hidden) return;
+    const today = ymd(), d = new Date();
+    const list = state.tasks.filter(isToday).sort(sortTasks);
+    const done = state.tasks.filter((t) => t.doneAt && ymd(new Date(t.doneAt)) === today).sort((a, b) => b.doneAt - a.doneAt);
+    const focusMin = state.sessions.filter((s) => s.date === today).reduce((a, s) => a + s.min, 0);
+    miniEl("date").textContent = `${d.getMonth() + 1}.${d.getDate()} ${DOW[d.getDay()]} · TODAY`;
+    miniEl("summary").textContent = `완료 ${done.length}/${done.length + list.length} · 집중 ${fmtH(focusMin)}`;
+    const item = (t) => {
+      const p = proj(t.projectId);
+      return `<li class="${t.status} ${timer.taskId === t.id ? "active" : ""}" data-id="${t.id}">
+        <button class="cb" data-mact="toggle" aria-label="완료 전환"></button>
+        <div><div class="t">${t.priority === 1 && t.status !== "done" ? '<span class="pri p1">!!</span> ' : ""}${esc(t.title)}</div>
+          <div class="m">${p ? `<i class="dot" style="background:${p.color}"></i>${esc(p.name)}` : ""} ${t.status !== "done" ? dueBadge(t.due, t.status) : ""}</div></div>
+        ${t.status !== "done" ? `<button class="play" data-mact="focus" title="집중 시작">▶</button>` : "<span></span>"}
+      </li>`;
+    };
+    miniEl("list").innerHTML =
+      (list.map(item).join("") || `<li class="empty muted">오늘 할 일이 없어요 🎉</li>`) +
+      (done.length ? `<li class="sep">오늘 끝낸 일</li>` + done.slice(0, 8).map(item).join("") : "");
+  }
+
+  miniRoot.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mact]"); if (!b) return;
+    const act = b.dataset.mact;
+    if (act === "pip") return openPip();
+    if (act === "full") { window.open(location.pathname, "_blank"); return; }
+    if (act === "ttoggle") return toggleTimer();
+    if (act === "tstop") return stopTimer();
+    const t = task(b.closest("li")?.dataset.id); if (!t) return;
+    if (act === "toggle") { setStatus(t, t.status === "done" ? "todo" : "done"); save(); }
+    if (act === "focus") startTimerFor(t);
+  });
+  miniRoot.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector("input");
+    const raw = input.value.trim(); if (!raw) return;
+    const f = parseQuick(raw); if (!f.title) return;
+    addTask({ ...f, pinned: ymd() });
+    input.value = "";
+  });
+
+  // 📌 항상 위 창: Document Picture-in-Picture (Edge/Chrome 116+)
+  async function openPip() {
+    if (pipWin) { pipWin.focus(); return; }
+    if (!("documentPictureInPicture" in window)) {
+      window.open(location.pathname + "?mini", "wt-mini", "width=360,height=640");
+      toast("이 브라우저는 '항상 위'를 지원하지 않아 작은 창으로 열었어요");
+      return;
+    }
+    try {
+      pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 560 });
+    } catch (err) { toast("작은 창을 열 수 없어요: " + err.message); return; }
+    const pdoc = pipWin.document;
+    $$('link[rel="stylesheet"]').forEach((l) => { const n = pdoc.createElement("link"); n.rel = "stylesheet"; n.href = l.href; pdoc.head.append(n); });
+    const theme = document.documentElement.getAttribute("data-theme"); if (theme) pdoc.documentElement.setAttribute("data-theme", theme);
+    pdoc.title = "Work Tracker Mini";
+    pdoc.body.className = "mini-mode pip";
+    miniRoot.hidden = false;
+    pdoc.body.append(miniRoot);
+    render();
+    pipWin.addEventListener("pagehide", () => {
+      document.body.append(miniRoot);
+      miniRoot.hidden = !MINI_MODE;
+      pipWin = null;
+    });
+  }
+  $("#openMini").addEventListener("click", openPip);
+
+  // ---------- 여러 창/탭 사이 실시간 반영 ----------
+  window.addEventListener("storage", (e) => {
+    if (e.key === KEY && e.newValue) {
+      try { state = JSON.parse(e.newValue); render(); } catch { /* ignore */ }
+    } else if (e.key === TIMER_KEY && e.newValue) {
+      try { timer = JSON.parse(e.newValue); notified = false; ensureTick(); render(); } catch { /* ignore */ }
+    }
+  });
+  // 다시 화면으로 돌아오면 Gist에서 최신 데이터 받기 (30초에 한 번까지)
+  let lastPull = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !state.autoSync || Date.now() - lastPull < 30000) return;
+    lastPull = Date.now(); pullGist();
+  });
+
+  if (MINI_MODE) { document.body.classList.add("mini-mode"); miniRoot.hidden = false; }
 
   // ---------- boot ----------
   storage.set(KEY, JSON.stringify(state));
