@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Work Tracker</title>
+  <meta name="description" content="프로젝트 · 할 일 · 집중 시간을 한 곳에서 추적하는 개인 작업 트래커" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23171512'/><path d='M8 16l5 5 11-11' stroke='%23f6f1e7' stroke-width='3.5' fill='none'/></svg>" />
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="eyebrow">PLAN · DO · TRACK</div>
+        <h1><span id="ownerName">RIN</span>의 작업실</h1>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button data-view="today" class="active"><span>오늘</span><kbd>1</kbd></button>
+        <button data-view="board"><span>보드</span><kbd>2</kbd></button>
+        <button data-view="projects"><span>프로젝트</span><kbd>3</kbd></button>
+        <button data-view="stats"><span>기록</span><kbd>4</kbd></button>
+      </nav>
+
+      <section class="timer" id="timer">
+        <div class="eyebrow">FOCUS</div>
+        <div class="timer-task" id="timerTask">작업을 선택하고 시작하세요</div>
+        <div class="timer-clock" id="timerClock">25:00</div>
+        <div class="timer-modes" id="timerModes">
+          <button data-mode="pomo" class="active">25분</button>
+          <button data-mode="long">50분</button>
+          <button data-mode="free">스톱워치</button>
+        </div>
+        <div class="timer-actions">
+          <button class="btn solid" id="timerToggle">시작</button>
+          <button class="btn" id="timerStop">기록 후 종료</button>
+        </div>
+      </section>
+
+      <div class="side-foot">
+        <span id="syncStatus" class="sync-status">로컬 저장</span>
+        <button class="link" id="openSettings">설정 · 동기화</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- TODAY -->
+      <section class="view" id="view-today">
+        <header class="view-head">
+          <div>
+            <div class="eyebrow" id="todayLabel"></div>
+            <h2>오늘의 작업</h2>
+          </div>
+          <div class="head-stats" id="todayStats"></div>
+        </header>
+
+        <form class="quick-add" id="quickAdd" autocomplete="off">
+          <input id="qaTitle" placeholder="할 일 추가…  (예: 발표 슬라이드 10장 #신호 !1 ~11/10)" />
+          <select id="qaProject"></select>
+          <button class="btn solid" type="submit">추가</button>
+        </form>
+        <p class="hint"><b>#프로젝트</b> 이름 일부 · <b>!1</b>~<b>!3</b> 우선순위 · <b>~11/10</b> 마감일 · <b>@30</b> 예상 30분 — 오늘 추가한 일은 자동으로 ‘오늘’에 고정됩니다.</p>
+
+        <div class="cols-2">
+          <div>
+            <h3 class="sec-title">해야 할 일 <span id="todoCount" class="count"></span></h3>
+            <ul class="task-list" id="todayList"></ul>
+            <h3 class="sec-title muted-title">곧 마감 (7일 이내)</h3>
+            <ul class="task-list" id="upcomingList"></ul>
+          </div>
+          <div>
+            <h3 class="sec-title">오늘 끝낸 일 <span id="doneCount" class="count"></span></h3>
+            <ul class="task-list" id="doneList"></ul>
+            <h3 class="sec-title">오늘의 회고</h3>
+            <textarea id="dailyNote" class="note" placeholder="잘한 점 · 막힌 점 · 내일 이어서 할 것"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- BOARD -->
+      <section class="view" id="view-board" hidden>
+        <header class="view-head">
+          <div>
+            <div class="eyebrow">KANBAN</div>
+            <h2>작업 보드</h2>
+          </div>
+          <select id="boardFilter" class="filter"></select>
+        </header>
+        <div class="board" id="board">
+          <div class="col" data-status="todo"><h3>할 일 <span class="count"></span></h3><ul></ul></div>
+          <div class="col" data-status="doing"><h3>진행 중 <span class="count"></span></h3><ul></ul></div>
+          <div class="col" data-status="done"><h3>완료 <span class="count"></span></h3><ul></ul></div>
+        </div>
+      </section>
+
+      <!-- PROJECTS -->
+      <section class="view" id="view-projects" hidden>
+        <header class="view-head">
+          <div>
+            <div class="eyebrow">PROJECTS</div>
+            <h2>프로젝트</h2>
+          </div>
+          <div class="row-gap">
+            <label class="check-inline"><input type="checkbox" id="showArchived" /> 보관함 보기</label>
+            <button class="btn solid" id="addProject">+ 프로젝트</button>
+          </div>
+        </header>
+        <div class="timeline" id="timeline"></div>
+        <div class="project-grid" id="projectGrid"></div>
+      </section>
+
+      <!-- STATS -->
+      <section class="view" id="view-stats" hidden>
+        <header class="view-head">
+          <div>
+            <div class="eyebrow">REFLECT</div>
+            <h2>기록</h2>
+          </div>
+          <div class="week-nav">
+            <button class="link" id="weekPrev">← 이전 주</button>
+            <span id="weekLabel"></span>
+            <button class="link" id="weekNext">다음 주 →</button>
+          </div>
+        </header>
+        <div class="kpis" id="kpis"></div>
+        <div class="cols-2">
+          <div>
+            <h3 class="sec-title">요일별 집중 시간</h3>
+            <div class="bars" id="dayBars"></div>
+          </div>
+          <div>
+            <h3 class="sec-title">프로젝트별 집중 시간</h3>
+            <div id="projBars"></div>
+          </div>
+        </div>
+        <h3 class="sec-title">집중 세션 로그</h3>
+        <ul class="log" id="sessionLog"></ul>
+      </section>
+    </main>
+  </div>
+
+  <!-- Task modal -->
+  <dialog id="taskModal" class="modal">
+    <form method="dialog" id="taskForm">
+      <div class="modal-head">
+        <input id="tTitle" class="title-input" placeholder="할 일 제목" required />
+        <button class="x" value="cancel" formnovalidate aria-label="닫기">×</button>
+      </div>
+      <div class="grid-fields">
+        <label>프로젝트<select id="tProject"></select></label>
+        <label>상태<select id="tStatus">
+          <option value="todo">할 일</option><option value="doing">진행 중</option><option value="done">완료</option>
+        </select></label>
+        <label>우선순위<select id="tPriority">
+          <option value="1">높음</option><option value="2">보통</option><option value="3">낮음</option>
+        </select></label>
+        <label>마감일<input type="date" id="tDue" /></label>
+        <label>예상 시간(분)<input type="number" min="0" step="5" id="tEst" /></label>
+        <label class="check-inline pin"><input type="checkbox" id="tToday" /> 오늘 할 일에 고정</label>
+      </div>
+      <div class="sub-head">
+        <h4>체크리스트</h4><span id="tSpent" class="muted"></span>
+      </div>
+      <ul id="tSubs" class="subs"></ul>
+      <div class="sub-add"><input id="tSubInput" placeholder="세부 단계 추가 후 Enter" /></div>
+      <label class="block">메모<textarea id="tNote" rows="3" placeholder="참고 링크, 진행 상황 등"></textarea></label>
+      <div class="modal-foot">
+        <button type="button" class="btn danger" id="tDelete">삭제</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="tFocus">이 작업 집중 시작</button>
+        <button class="btn solid" value="save" id="tSave">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Project modal -->
+  <dialog id="projectModal" class="modal narrow">
+    <form method="dialog" id="projectForm">
+      <div class="modal-head">
+        <input id="pName" class="title-input" placeholder="프로젝트 이름" required />
+        <button class="x" value="cancel" formnovalidate aria-label="닫기">×</button>
+      </div>
+      <div class="grid-fields">
+        <label>시작일<input type="date" id="pStart" /></label>
+        <label>마감일<input type="date" id="pDue" /></label>
+        <label class="span2">링크 (노션 등)<input type="url" id="pLink" placeholder="https://" /></label>
+        <label class="span2">색상<div class="swatches" id="pColors"></div></label>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn danger" id="pDelete">삭제</button>
+        <button type="button" class="btn" id="pArchive">보관</button>
+        <span class="spacer"></span>
+        <button class="btn solid" value="save">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Settings modal -->
+  <dialog id="settingsModal" class="modal narrow">
+    <form method="dialog">
+      <div class="modal-head">
+        <h3>설정 · 동기화</h3>
+        <button class="x" value="cancel" aria-label="닫기">×</button>
+      </div>
+      <label class="block">이름<input id="sName" /></label>
+
+      <h4>기기 간 동기화 (GitHub Gist)</h4>
+      <p class="muted small">
+        데이터는 기본적으로 이 브라우저에만 저장됩니다. 노트북·휴대폰에서 같이 쓰려면
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=work-tracker" target="_blank" rel="noopener">gist 권한만 있는 토큰</a>을 만들어 아래에 붙여넣으세요.
+        토큰은 이 브라우저에만 저장되며, 데이터는 비공개(secret) Gist에 저장됩니다.
+      </p>
+      <label class="block">GitHub 토큰<input id="sToken" type="password" placeholder="ghp_… / github_pat_…" autocomplete="off" /></label>
+      <label class="block">Gist ID <span class="muted small">(비워두면 처음 업로드할 때 자동 생성 · 다른 기기에서는 같은 ID 입력)</span><input id="sGist" /></label>
+      <label class="check-inline"><input type="checkbox" id="sAuto" /> 변경 시 자동 업로드 · 열 때 자동 다운로드</label>
+      <div class="row-gap mt">
+        <button type="button" class="btn" id="sPush">지금 업로드</button>
+        <button type="button" class="btn" id="sPull">지금 다운로드</button>
+      </div>
+
+      <h4>백업</h4>
+      <div class="row-gap">
+        <button type="button" class="btn" id="sExport">JSON 내보내기</button>
+        <label class="btn file-btn">JSON 가져오기<input type="file" id="sImport" accept="application/json" hidden /></label>
+      </div>
+      <div class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn solid" value="save" id="sSave">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
